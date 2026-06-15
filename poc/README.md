@@ -67,13 +67,15 @@ Opens at http://localhost:8501
    - **Repository:** your repo
    - **Branch:** `main` (or your default branch)
    - **Main file path:** `poc/frontend/app.py`
-   - **Python version:** 3.12
-4. Click **Deploy**. First boot may take a few minutes (apt packages + Chromium download).
-5. Share the `*.streamlit.app` URL.
+4. Open **Advanced settings** and set **Python version to 3.12** (required — Playwright 1.49 does not support 3.14).
+5. Click **Deploy**. First boot may take a few minutes (apt packages + Chromium download).
+6. Share the `*.streamlit.app` URL.
+
+If the app was already deployed on Python 3.14: open the app **Settings** (⚙️) → change Python version to **3.12** → save and reboot.
 
 Deploy files (already in the repo):
 
-- `packages.txt` — Linux libraries for Playwright Chromium
+- `packages.txt` — Linux libraries for Playwright Chromium (package names only, no comments)
 - `poc/frontend/requirements.txt` — Python dependencies (read by Community Cloud)
 - `poc/frontend/.streamlit/config.toml` — Streamlit server settings
 
