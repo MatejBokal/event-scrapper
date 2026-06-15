@@ -1,11 +1,11 @@
-"""CSV and JSON export helpers."""
+"""CSV, JSON, and Excel export helpers."""
 
 from __future__ import annotations
 
 import csv
 import json
 from datetime import datetime
-from io import StringIO
+from io import BytesIO, StringIO
 from typing import Any
 
 from backend.models import ContactResult, LeadResult
@@ -62,6 +62,22 @@ def leads_to_csv_bytes(leads: list[LeadResult]) -> bytes:
     for record in leads_to_records(leads):
         writer.writerow(record)
     return buffer.getvalue().encode("utf-8-sig")
+
+
+def leads_to_xlsx_bytes(leads: list[LeadResult]) -> bytes:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Leads"
+    sheet.append(LEAD_EXPORT_FIELDS)
+
+    for record in leads_to_records(leads):
+        sheet.append([record.get(field) for field in LEAD_EXPORT_FIELDS])
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
 
 
 def contacts_to_json_bytes(contacts: list[ContactResult]) -> bytes:

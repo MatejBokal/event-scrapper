@@ -17,8 +17,7 @@ from backend.config import FIELD_OPTIONS
 from backend.exporter import (
     contacts_to_csv_bytes,
     export_filename,
-    leads_to_csv_bytes,
-    leads_to_json_bytes,
+    leads_to_xlsx_bytes,
 )
 from backend.models import PipelineResult, SearchParams
 from backend.pipeline import run_pipeline
@@ -45,7 +44,7 @@ if sys.platform == "linux":
         st.error(f"Browser setup failed: {exc}")
         st.stop()
 
-st.title("Confiva Lead Finder")
+st.title("Lead Finder")
 st.caption(
     "PoC v1.1 — find conference organizer leads by field and region. "
     "One best contact per conference. Ready for export to your email tool."
@@ -185,23 +184,13 @@ if result:
                 st.caption(lead.evidence_snippet)
                 st.divider()
 
-        col_csv, col_json = st.columns(2)
-        with col_csv:
-            st.download_button(
-                label="Download leads CSV",
-                data=leads_to_csv_bytes(result.leads),
-                file_name=export_filename("csv"),
-                mime="text/csv",
-                use_container_width=True,
-            )
-        with col_json:
-            st.download_button(
-                label="Download leads JSON",
-                data=leads_to_json_bytes(result.leads),
-                file_name=export_filename("json"),
-                mime="application/json",
-                use_container_width=True,
-            )
+        st.download_button(
+            label="Download leads Excel",
+            data=leads_to_xlsx_bytes(result.leads),
+            file_name=export_filename("xlsx"),
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
     else:
         st.info("No organizer leads found. Try a different region or select more months.")
 
