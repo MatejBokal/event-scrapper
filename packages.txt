@@ -1,5 +1,3 @@
-# Debian 11 (bullseye) — Chromium runtime libs for Playwright on Streamlit Community Cloud.
-# See: https://github.com/microsoft/playwright/blob/main/packages/playwright-core/src/server/registry/nativeDeps.ts
 libasound2
 libatk-bridge2.0-0
 libatk1.0-0
