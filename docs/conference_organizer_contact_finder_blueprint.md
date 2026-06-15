@@ -1411,3 +1411,11 @@ No invented data.
 Confidence score everything.
 Manual review is part of the product.
 ```
+
+# Sources
+Maybe think about listing some websites for default good sources, for example:
+- https://www.webmobi.com/
+
+Maybe we could also try multi-step:
+- if there's newsletters or other web hits that are not direct connections we could further explore the leads mentioned on that places
+-  multi-stepcould be used for validation too(if AI doesn't do its job well enough) - before final list validate it against field, country and everything else again

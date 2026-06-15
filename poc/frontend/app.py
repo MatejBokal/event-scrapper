@@ -1,4 +1,4 @@
-"""Streamlit frontend for PoC v1.1 — Confiva lead generation."""
+"""Streamlit frontend for PoC v1.1 — lead generation."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ from backend.regions import REGION_OPTIONS
 MONTH_PICKER_HORIZON = 24
 
 st.set_page_config(
-    page_title="Confiva Lead Finder — PoC",
+    page_title="Lead Finder — PoC",
     page_icon="📇",
     layout="wide",
 )
