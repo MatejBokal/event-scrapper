@@ -556,7 +556,7 @@ REGION_PROFILES: dict[str, RegionProfile] = {
 }
 
 
-REGION_OPTIONS = list(REGION_PROFILES.keys()) + ["Custom"]
+REGION_OPTIONS = list(REGION_PROFILES.keys())
 
 
 def build_custom_profile(name: str) -> RegionProfile:

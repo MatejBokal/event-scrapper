@@ -38,7 +38,7 @@ def _years_in_text(text: str) -> set[int]:
 
 def _target_years(params: SearchParams) -> set[int]:
     years: set[int] = set()
-    for month in (params.start_month, params.end_month):
+    for month in params.selected_months:
         if month and "-" in month:
             try:
                 years.add(int(month.split("-")[0]))

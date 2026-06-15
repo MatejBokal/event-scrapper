@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -14,7 +13,7 @@ if str(POC_ROOT) not in sys.path:
     sys.path.insert(0, str(POC_ROOT))
 
 from backend.cloud_bootstrap import ensure_playwright_chromium
-from backend.config import CONTACT_TYPES, DEFAULT_FIELD_SUGGESTIONS
+from backend.config import FIELD_OPTIONS
 from backend.exporter import (
     contacts_to_csv_bytes,
     export_filename,
@@ -24,6 +23,8 @@ from backend.exporter import (
 from backend.models import PipelineResult, SearchParams
 from backend.pipeline import run_pipeline
 from backend.regions import REGION_OPTIONS
+
+MONTH_PICKER_HORIZON = 24
 
 st.set_page_config(
     page_title="Confiva Lead Finder — PoC",
@@ -56,88 +57,95 @@ if "progress_log" not in st.session_state:
     st.session_state.progress_log = []
 
 
-def _default_start_month() -> str:
-    return datetime.now().strftime("%Y-%m")
+def _month_picker_options() -> dict[str, str]:
+    """Map display label (e.g. June 2026) to value (2026-06)."""
+    options: dict[str, str] = {}
+    year = datetime.now().year
+    month = datetime.now().month
+    for _ in range(MONTH_PICKER_HORIZON):
+        value = f"{year}-{month:02d}"
+        label = datetime(year, month, 1).strftime("%B %Y")
+        options[label] = value
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    return options
 
 
-def _default_end_month() -> str:
-    year = datetime.now().year + 1
-    return f"{year}-03"
+def _default_month_labels(options: dict[str, str]) -> list[str]:
+    labels = list(options.keys())
+    return labels[:3]
 
+
+MONTH_OPTIONS = _month_picker_options()
+MONTH_LABELS = list(MONTH_OPTIONS.keys())
+DEFAULT_MONTH_LABELS = _default_month_labels(MONTH_OPTIONS)
 
 with st.form("search_form"):
     col1, col2 = st.columns(2)
 
     with col1:
-        field = st.text_input(
+        field = st.selectbox(
             "Field / topic",
-            value="Healthcare",
-            help="Any topic works. Healthcare, pharma, security, IT, and AI are common.",
+            FIELD_OPTIONS,
+            index=FIELD_OPTIONS.index("Healthcare"),
         )
-        region = st.selectbox("Region", REGION_OPTIONS, index=REGION_OPTIONS.index("Slovenia"))
-        contact_type = st.selectbox(
-            "Contact focus",
-            CONTACT_TYPES,
-            index=0,
-            help="Organizer is recommended for Confiva outreach.",
+        region = st.selectbox(
+            "Region",
+            REGION_OPTIONS,
+            index=REGION_OPTIONS.index("Slovenia"),
         )
 
     with col2:
-        start_month = st.text_input("Start month (YYYY-MM)", value=_default_start_month())
-        end_month = st.text_input("End month (YYYY-MM)", value=_default_end_month())
-        max_conferences = st.slider("Max conferences", min_value=5, max_value=20, value=10)
-
-    custom_region = ""
-    if region == "Custom":
-        custom_region = st.text_input(
-            "Custom region / area / city",
-            placeholder="e.g. DACH, Ljubljana, Bavaria",
+        selected_month_labels = st.multiselect(
+            "Months",
+            MONTH_LABELS,
+            default=DEFAULT_MONTH_LABELS,
+            help="Select one or more months when conferences should take place.",
         )
-
-    manual_url = st.text_input(
-        "Manual official URL (optional)",
-        placeholder="https://example-conference.org",
-    )
+        max_conferences = st.slider("Max conferences", min_value=5, max_value=20, value=10)
 
     submitted = st.form_submit_button("Find Leads", type="primary", use_container_width=True)
 
 if submitted:
-    params = SearchParams(
-        field=field.strip(),
-        region=region,
-        start_month=start_month.strip(),
-        end_month=end_month.strip(),
-        contact_type=contact_type,
-        max_conferences=max_conferences,
-        manual_url=manual_url.strip(),
-        custom_region=custom_region.strip(),
-    )
-
-    st.session_state.progress_log = []
-    status = st.status("Running pipeline...", expanded=True)
-    progress_placeholder = status.empty()
-
-    def on_progress(stage: str, payload: dict) -> None:
-        message = payload.get("message", stage)
-        st.session_state.progress_log.append(f"[{stage}] {message}")
-        progress_placeholder.write("\n".join(st.session_state.progress_log[-10:]))
-
-    with st.spinner("Working..."):
-        result = run_pipeline(params, on_progress=on_progress)
-
-    st.session_state.pipeline_result = result
-
-    if result.errors:
-        for error in result.errors:
-            if result.leads:
-                st.warning(error)
-            else:
-                status.update(label="Finished with warnings", state="error")
-                st.warning(error)
-    elif result.leads:
-        status.update(label="Leads found", state="complete")
+    if not selected_month_labels:
+        st.error("Select at least one month.")
     else:
-        status.update(label="No leads found", state="complete")
+        selected_months = tuple(MONTH_OPTIONS[label] for label in selected_month_labels)
+        params = SearchParams(
+            field=field,
+            region=region,
+            selected_months=selected_months,
+            contact_type="organizer",
+            max_conferences=max_conferences,
+        )
+
+        st.session_state.progress_log = []
+        status = st.status("Running pipeline...", expanded=True)
+        progress_placeholder = status.empty()
+
+        def on_progress(stage: str, payload: dict) -> None:
+            message = payload.get("message", stage)
+            st.session_state.progress_log.append(f"[{stage}] {message}")
+            progress_placeholder.write("\n".join(st.session_state.progress_log[-10:]))
+
+        with st.spinner("Working..."):
+            result = run_pipeline(params, on_progress=on_progress)
+
+        st.session_state.pipeline_result = result
+
+        if result.errors:
+            for error in result.errors:
+                if result.leads:
+                    st.warning(error)
+                else:
+                    status.update(label="Finished with warnings", state="error")
+                    st.warning(error)
+        elif result.leads:
+            status.update(label="Leads found", state="complete")
+        else:
+            status.update(label="No leads found", state="complete")
 
 result: PipelineResult | None = st.session_state.pipeline_result
 
@@ -195,7 +203,7 @@ if result:
                 use_container_width=True,
             )
     else:
-        st.info("No organizer leads found. Try Custom region, a manual URL, or a broader field.")
+        st.info("No organizer leads found. Try a different region or select more months.")
 
     with st.expander("Debug panel", expanded=False):
         st.markdown("#### Generated queries")
@@ -299,4 +307,3 @@ if result:
 
 else:
     st.info("Fill in the search form and click **Find Leads** to start.")
-    st.write("Suggested fields:", ", ".join(DEFAULT_FIELD_SUGGESTIONS))

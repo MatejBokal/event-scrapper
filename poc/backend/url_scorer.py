@@ -92,23 +92,11 @@ def _min_score_for_region(params: SearchParams) -> float:
 def select_sites(
     hits: list[SearchHit],
     params: SearchParams,
-    manual_url: str = "",
 ) -> tuple[list[SelectedSite], list[SearchHit]]:
     ranked = rank_hits(hits, params)
     selected: list[SelectedSite] = []
     skipped: list[SearchHit] = []
     min_score = _min_score_for_region(params)
-
-    if manual_url.strip():
-        selected.append(
-            SelectedSite(
-                url=manual_url.strip(),
-                title="Manual override",
-                url_score=100.0,
-                snippet="User-provided official URL",
-                source="manual",
-            )
-        )
 
     for hit in ranked:
         if len(selected) >= params.max_conferences:

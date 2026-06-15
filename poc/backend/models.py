@@ -13,12 +13,18 @@ ExtractionMethod = Literal["mailto", "regex", "regex+keyword"]
 class SearchParams:
     field: str
     region: str
-    start_month: str
-    end_month: str
+    selected_months: tuple[str, ...]
     contact_type: str = "organizer"
     max_conferences: int = 10
-    manual_url: str = ""
     custom_region: str = ""
+
+    @property
+    def start_month(self) -> str:
+        return min(self.selected_months) if self.selected_months else ""
+
+    @property
+    def end_month(self) -> str:
+        return max(self.selected_months) if self.selected_months else ""
 
 
 @dataclass

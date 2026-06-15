@@ -47,23 +47,18 @@ def run_pipeline(
             {"message": "Running localized web search...", "queries": queries},
         )
 
-        if params.manual_url.strip():
-            search_hits: list[SearchHit] = []
-            search_errors: list[str] = []
-        else:
-            search_hits, search_errors = search_queries(queries, params)
-            result.stats.queries_run = len(queries)
-            for error in search_errors:
-                result.errors.append(error)
+        search_hits, search_errors = search_queries(queries, params)
+        result.stats.queries_run = len(queries)
+        for error in search_errors:
+            result.errors.append(error)
 
-        if not search_hits and not params.manual_url.strip():
+        if not search_hits:
             if search_errors:
                 result.errors.append(
-                    "All search queries failed. Check your internet connection and try again, "
-                    "or paste a manual official URL."
+                    "All search queries failed. Check your internet connection and try again."
                 )
             else:
-                result.errors.append("Search returned no results. Try broader terms or a manual URL.")
+                result.errors.append("Search returned no results. Try broader terms or more months.")
             return result
 
         filtered_hits, filtered_out = filter_event_hits(search_hits, params)
@@ -84,11 +79,7 @@ def run_pipeline(
             },
         )
 
-        selected, skipped = select_sites(
-            geo_scored,
-            params,
-            manual_url=params.manual_url,
-        )
+        selected, skipped = select_sites(geo_scored, params)
         result.skipped_urls = skipped
 
         _emit(
@@ -115,7 +106,7 @@ def run_pipeline(
         if not crawl_targets:
             result.errors.append(
                 "No official conference sites to crawl. Listing pages may not have linked "
-                "to official sites — try a manual URL, Custom region, or broader search terms."
+                "to official sites — try a different region or more months."
             )
             return result
 

@@ -159,7 +159,7 @@ GENERIC_EMAIL_PREFIXES = ["info@", "contact@", "hello@", "office@", "mail@", "re
 
 CONTACT_TYPES = ["organizer", "any", "committee"]
 
-DEFAULT_FIELD_SUGGESTIONS = [
+FIELD_OPTIONS = [
     "Healthcare",
     "Pharmaceuticals",
     "Security",
@@ -167,3 +167,5 @@ DEFAULT_FIELD_SUGGESTIONS = [
     "IT",
     "AI",
 ]
+
+DEFAULT_FIELD_SUGGESTIONS = FIELD_OPTIONS

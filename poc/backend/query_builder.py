@@ -181,33 +181,22 @@ MONTH_NAMES: dict[str, list[str]] = {
 }
 
 
-def _all_months_in_range(start_month: str, end_month: str) -> list[tuple[int, int]]:
-    if not start_month or not end_month:
-        return []
-
-    try:
-        start_year, start_m = map(int, start_month.split("-"))
-        end_year, end_m = map(int, end_month.split("-"))
-    except ValueError:
-        return []
-
+def _months_from_selection(selected_months: tuple[str, ...]) -> list[tuple[int, int]]:
     months: list[tuple[int, int]] = []
-    year, month = start_year, start_m
-    while (year, month) <= (end_year, end_m):
-        months.append((year, month))
-        month += 1
-        if month > 12:
-            month = 1
-            year += 1
-    return months
+    for month_str in selected_months:
+        try:
+            year, month = map(int, month_str.split("-"))
+            months.append((year, month))
+        except ValueError:
+            continue
+    return sorted(months)
 
 
 def _sample_query_months(
-    start_month: str,
-    end_month: str,
+    selected_months: tuple[str, ...],
     max_samples: int = MONTH_QUERY_SAMPLE_SIZE,
 ) -> list[tuple[int, int]]:
-    months = _all_months_in_range(start_month, end_month)
+    months = _months_from_selection(selected_months)
     if not months:
         return []
     if len(months) <= max_samples:
@@ -217,12 +206,16 @@ def _sample_query_months(
     return [months[index] for index in indices[:max_samples]]
 
 
-def _year_from_range(start_month: str, end_month: str) -> str:
-    if start_month:
-        return start_month.split("-")[0]
-    if end_month:
-        return end_month.split("-")[0]
-    return ""
+def _year_from_selection(selected_months: tuple[str, ...]) -> str:
+    years: list[int] = []
+    for month_str in selected_months:
+        if "-" not in month_str:
+            continue
+        try:
+            years.append(int(month_str.split("-")[0]))
+        except ValueError:
+            continue
+    return str(min(years)) if years else ""
 
 
 def _month_label(year: int, month: int, lang: str) -> str:
@@ -325,8 +318,8 @@ def _build_month_queries(
 def build_queries(params: SearchParams) -> list[str]:
     profile = get_region_profile(params.region, params.custom_region)
     field_terms = get_field_terms(params.field, profile)
-    year = _year_from_range(params.start_month, params.end_month)
-    sampled_months = _sample_query_months(params.start_month, params.end_month)
+    year = _year_from_selection(params.selected_months)
+    sampled_months = _sample_query_months(params.selected_months)
     locations: list[str] = list(profile.cities) or [profile.display_name]
 
     month_queries = _build_month_queries(profile, field_terms, locations, sampled_months)
