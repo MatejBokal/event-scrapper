@@ -1,8 +1,10 @@
 # PoC v1.1 — Conference Organizer Lead Finder
 
-Specification for the proof-of-concept app. This document captures everything agreed before and during implementation.
+Specification for the proof-of-concept pipeline. This document captures behaviour and rules agreed before and during implementation.
 
-**Related:** [Full MVP blueprint](./conference_organizer_contact_finder_blueprint.md) · [MVP roadmap](./mvp_roadmap.md)
+> **Daily use:** run the MVP app in [`../frontend/`](../frontend/) (Streamlit + Supabase). This spec still describes the pipeline in `poc/backend/`, which the API loads via `poc_bridge`.
+
+**Related:** [Full MVP blueprint](./conference_organizer_contact_finder_blueprint.md) · [MVP roadmap](./mvp_roadmap.md) · [Root README](../README.md)
 
 ---
 
@@ -68,11 +70,11 @@ Optional: manual official URL  (crawl when search is thin)
 | Predefined fields | Dropdown only (Healthcare, Pharmaceuticals, Security, Cybersecurity, IT, AI) |
 | Predefined regions | Dropdown from `regions.py` (~35 profiles) |
 | Organizer contacts only | Fixed `contact_type=organizer` — Confiva lead gen, no sponsorship/CFP picker |
-| Query generation | Up to 18 localized queries per run (month sampling + year fallbacks) |
+| Query generation | Up to 30 localized queries per run (all event synonyms + month sampling) |
 | Web search | DuckDuckGo via `ddgs` — free, no API key |
 | URL scoring | Heuristic official-site picker + listing discovery |
 | Manual official URL | Optional text input — crawl directly when search is thin |
-| Crawling | `requests` + BeautifulSoup + `trafilatura`; Playwright fallback |
+| Crawling | `requests` + BeautifulSoup + `trafilatura`; Playwright fallback; `CrawlSiteResult` for 403/empty (MVP persists as `crawl_blocked`) |
 | Extraction | Rule-based: `mailto:`, regex emails, organizer keyword proximity |
 | Validation | Email must appear verbatim in crawled page text |
 | Confidence | Simple deterministic rules |
@@ -88,12 +90,12 @@ Optional: manual official URL  (crawl when search is thin)
 | Contact type picker | Never in PoC — organizer only |
 | Automated tests | Later |
 | Success benchmark runs | Later |
-| Database (SQLite/PostgreSQL) | MVP Milestone 1 |
+| Database (SQLite/PostgreSQL) | Done — Supabase in MVP |
 | FastAPI backend | MVP |
 | Next.js frontend | MVP |
 | LLM extraction (Ollama, Groq, OpenAI) | v2 / MVP Milestone 4 |
 | User authentication | MVP+ |
-| Search run history / persistence | MVP |
+| Search run history / persistence | Done — MVP `search_runs` + UI |
 | Manual edit UI for records | MVP |
 | Scheduled / background jobs | MVP+ |
 | Full confidence model | MVP |
@@ -214,7 +216,7 @@ AI in healthcare congress exhibitors 2027
 AI in healthcare call for papers 2027 Europe
 ```
 
-v1.1 generates a **small set of month-specific queries** (start / middle / end of range, localized month names) plus year-based fallbacks. Full per-month expansion for every city is deferred to MVP. Keep total queries at `MAX_QUERIES` (18) to respect free DuckDuckGo limits.
+v1.1 generates a **small set of month-specific queries** (start / middle / end of range, localized month names) plus year-based fallbacks using **all event synonyms** where the query budget allows (`conference`, `congress`, `summit`, `symposium`, `convention`, `expo`, `event`, `fair` + local terms). Keep total queries at `MAX_QUERIES` (30) to respect free DuckDuckGo limits.
 
 #### 5.2 Search
 
@@ -451,7 +453,7 @@ docs/
 ## 9. Configuration defaults
 
 ```python
-MAX_QUERIES = 18
+MAX_QUERIES = 30
 RESULTS_PER_QUERY = 15
 MAX_CONFERENCE_SITES = 10
 MAX_PAGES_PER_SITE = 10
@@ -669,7 +671,7 @@ Automates variations like:
 
 Month queries sample **start, middle, and end** months from the selected range (up to 3), using localized month names (`June` / `junij`, etc.). Up to **6 query slots** are reserved for month variants; the rest stay year/location/organizer queries.
 
-Interleaves languages per region up to `MAX_QUERIES` (18).
+Interleaves languages per region up to `MAX_QUERIES` (30).
 
 ### Lead export schema
 

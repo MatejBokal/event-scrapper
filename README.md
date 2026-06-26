@@ -4,10 +4,12 @@ Find conference **organizer leads** by field and region, with evidence-backed ex
 
 | Layer | What | Folder |
 |-------|------|--------|
-| **MVP (use this)** | API + Supabase + review UI | `backend/`, `frontend/` |
-| **PoC (standalone)** | Local Streamlit, no database | `poc/` |
+| **MVP (use this)** | API + Supabase + Streamlit app | `backend/`, `frontend/` |
+| **PoC (standalone)** | Local pipeline, no database | `poc/` |
 
-Docs: [MVP roadmap](docs/mvp_roadmap.md) · [PoC spec](docs/poc_v1_spec.md)
+**Docs:** [MVP roadmap](docs/mvp_roadmap.md) · [PoC spec](docs/poc_v1_spec.md) · [Blueprint](docs/conference_organizer_contact_finder_blueprint.md)
+
+**Status:** MVP Phases 1–6 complete (search → crawl → extract → review → export). Phase 7 (auth) not started.
 
 ---
 
@@ -15,7 +17,7 @@ Docs: [MVP roadmap](docs/mvp_roadmap.md) · [PoC spec](docs/poc_v1_spec.md)
 
 - **Python 3.11+** (3.12 recommended for Playwright)
 - **Supabase** project with migrations applied
-- Repo-root **`.env`** with your database connection string
+- Repo-root **`.env`** with `DATABASE_URL`
 
 ---
 
@@ -36,7 +38,7 @@ API_HOST=127.0.0.1
 API_PORT=8001
 ```
 
-The review UI can also use `API_BASE_URL` (defaults to `http://127.0.0.1:8001`).
+The Streamlit app can use `API_BASE_URL` (defaults to `http://127.0.0.1:8001`).
 
 ### 2. Database migrations
 
@@ -45,7 +47,7 @@ python scripts/apply_migrations.py
 python scripts/verify_schema.py
 ```
 
-### 3. Backend dependencies
+### 3. Backend
 
 ```powershell
 cd backend
@@ -55,7 +57,7 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
-### 4. Review UI dependencies
+### 4. Frontend app
 
 ```powershell
 cd frontend
@@ -64,11 +66,13 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
+Requires **Streamlit 1.36+** (sidebar navigation).
+
 ---
 
-## Run the MVP (daily use)
+## Run (daily use)
 
-You need **two terminals** — API + one UI for everything (search, review, export).
+Two terminals:
 
 ### Terminal 1 — API
 
@@ -78,10 +82,10 @@ cd backend
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 ```
 
-- API docs: http://127.0.0.1:8001/docs
-- Health: http://127.0.0.1:8001/health
+- Docs: http://127.0.0.1:8001/docs  
+- Health: http://127.0.0.1:8001/health  
 
-### Terminal 2 — App (search + review + export)
+### Terminal 2 — App
 
 ```powershell
 cd frontend
@@ -89,22 +93,23 @@ cd frontend
 streamlit run app.py
 ```
 
-- App: http://localhost:8501
-- **Find leads** — run a new search pipeline
-- **Review leads** — edit contacts, verify/reject, view evidence
-- **Export** — download Excel from the sidebar
+Open http://localhost:8501
+
+| Page | Purpose |
+|------|---------|
+| **Find leads** | Run full pipeline (search + crawl + extract) |
+| **Review leads** | Filter, open, edit contacts, verify/reject |
+| **Manual crawl** | Sites that blocked auto-crawl (403, etc.) |
+| **Conference detail** | Opens from any list — breadcrumbs + back button |
+| **Sidebar export** | Download `confiva_leads_*.xlsx` |
 
 ---
 
-## Run a new search
+## Run a search
 
-### Option A — API docs (interactive)
+**Recommended:** use **Find leads** in the Streamlit app.
 
-1. Open http://127.0.0.1:8001/docs
-2. `POST /api/search-runs` — create a run (example body below)
-3. `POST /api/search-runs/{id}/execute` — full pipeline (search + crawl + extract)
-
-Or create and run everything in one request:
+**API alternative** — `POST /api/search-runs` with:
 
 ```json
 {
@@ -119,46 +124,45 @@ Or create and run everything in one request:
 }
 ```
 
-### Option B — Smoke test script
+Or on an existing run: `POST /api/search-runs/{id}/execute`
+
+**Smoke test:**
 
 ```powershell
 python scripts/smoke_test_execute.py
 ```
 
-Takes a few minutes (live search + crawl). Results appear in the review UI and export.
+---
 
-### Option C — Step by step
+## What the pipeline does
 
-```text
-POST /api/search-runs          → search only (execute_search: true)
-POST /api/search-runs/{id}/crawl
-POST /api/search-runs/{id}/extract
-```
-
-Or `POST /api/search-runs/{id}/execute` for crawl + extract on an existing run.
+1. **Search** — up to 30 localized queries (conference, congress, summit, symposium, convention, expo, event, fair + local terms)
+2. **Filter & score** — drop news/spam; pick official sites
+3. **Crawl** — fetch pages (HTTP + Playwright fallback)
+4. **Extract** — regex/mailto emails, validate, rank
+5. **Persist** — conferences, organizers, evidence in Supabase
+6. **Block list** — sites that return 403 / empty are saved as `crawl_blocked` and skipped on future runs (see **Manual crawl**)
 
 ---
 
 ## PoC only (no Supabase)
 
-Standalone local pipeline — useful for quick experiments without the database.
-
 ```powershell
 cd poc
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 playwright install chromium
 streamlit run frontend/app.py
 ```
 
-See [poc/README.md](poc/README.md) for PoC details.
+See [poc/README.md](poc/README.md). The MVP app in `frontend/` replaces this for normal use.
 
 ---
 
 ## Smoke tests
 
-With the API running on port 8001:
+With API on port 8001:
 
 ```powershell
 python scripts/test_supabase_connection.py
@@ -174,13 +178,15 @@ python scripts/smoke_test_review.py
 ## Project layout
 
 ```text
-backend/          FastAPI + SQLAlchemy (MVP API)
-frontend/         Streamlit review UI (MVP)
-poc/              Original PoC pipeline + Streamlit
+backend/          FastAPI v0.7 — pipeline services + CRUD + export
+frontend/         Streamlit app (search, review, manual crawl)
+  pages/            Multipage UI
+  lib/              Nav, sidebar, shared state
+poc/              Original PoC (lifted via poc_bridge)
 supabase/         SQL migrations
-scripts/          Migrations, smoke tests, utilities
+scripts/          apply_migrations, smoke tests
 docs/             Specs and roadmap
-.env              Secrets (gitignored) — DATABASE_URL required
+.env              DATABASE_URL (gitignored)
 ```
 
 ---
@@ -189,14 +195,15 @@ docs/             Specs and roadmap
 
 | Problem | Fix |
 |---------|-----|
-| Port 8001 in use | Stop the other process or set `API_PORT` in `.env` |
-| `DATABASE_URL` / 401 errors | Check Supabase password and connection string in `.env` |
-| Empty review list | Run a pipeline first (`smoke_test_execute.py` or `/execute`) |
-| Crawl returns 0 pages | Try `manual_official_url` with a known conference site |
-| Review UI can't reach API | Ensure API is running; set `$env:API_BASE_URL = "http://127.0.0.1:8001"` |
+| `.venv\Scripts\activate` fails on Windows | Use `.\.venv\Scripts\Activate.ps1` after `python -m venv .venv` |
+| Port 8001 in use | Stop other process or set `API_PORT` in `.env` |
+| `DATABASE_URL` / 401 | Check Supabase password in `.env` |
+| Empty review list | Run **Find leads** or `smoke_test_execute.py` |
+| Crawl 403 / 0 pages | Check **Manual crawl**; add contact manually; use **Retry auto-crawl** if site may work later |
+| UI can't reach API | Start backend; `$env:API_BASE_URL = "http://127.0.0.1:8001"` |
 
 ---
 
 ## What's next
 
-MVP Phases 1–6 are complete. Phase 7 (Supabase Auth + RLS) is for multi-user or hosted deploy. See [docs/mvp_roadmap.md](docs/mvp_roadmap.md).
+Phase 7 — Supabase Auth + RLS for multi-user or hosted deploy. See [docs/mvp_roadmap.md](docs/mvp_roadmap.md).

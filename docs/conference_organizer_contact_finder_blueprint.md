@@ -1,5 +1,7 @@
 # Conference Organizer Contact Finder App — Full Blueprint
 
+> **Implementation status (2026):** MVP Phases 1–6 (+ crawl block-list) are built. Run via [../README.md](../README.md). This document remains the long-term product vision; see [mvp_roadmap.md](./mvp_roadmap.md).
+
 ## 1. Product Goal
 
 Build a web app that finds conferences in specific fields and month ranges, extracts organizer/contact information from official sources, stores the data, assigns confidence scores, and allows export to CSV/Excel.
