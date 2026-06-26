@@ -1,8 +1,8 @@
-# PoC v1 — Conference Organizer Contact Finder
+# PoC v1.1 — Conference Organizer Lead Finder
 
-Specification for the proof-of-concept app. This document captures everything agreed before implementation.
+Specification for the proof-of-concept app. This document captures everything agreed before and during implementation.
 
-**Related:** [Full MVP blueprint](./conference_organizer_contact_finder_blueprint.md)
+**Related:** [Full MVP blueprint](./conference_organizer_contact_finder_blueprint.md) · [MVP roadmap](./mvp_roadmap.md)
 
 ---
 
@@ -18,16 +18,18 @@ PoC v1 is **not** the MVP. It is a thin vertical slice to prove the pipeline wor
 
 1. **Discovery** — Does search find relevant conferences for a given field, region, and month range?
 2. **Site selection** — Can we reach official conference websites (not just listing aggregators)?
-3. **Extraction** — Can we pull sponsorship/organizer emails from crawled pages without inventing data?
+3. **Extraction** — Can we pull **organizer** emails from crawled pages without inventing data?
 4. **Usefulness** — Are enough results good enough to demo without heavy manual cleanup?
 
-### Success criteria
+### Success criteria (deferred)
+
+Benchmark validation is planned later. Target bar when we run it:
 
 - At least **3 conferences** with a traceable email per run on a real test query
 - Every email linked to a **source URL** and **evidence snippet**
 - A full run completes in **under ~5 minutes** on a typical machine
 - **Zero cost** — no paid APIs, no API keys required (except optional local tooling)
-- User can **download CSV or JSON** of all results
+- User can **download leads** for outreach
 
 ---
 
@@ -46,36 +48,46 @@ PoC v1 focuses on **emails and evidence**, not rich organizer profiles (names, r
 **Target demo query example:**
 
 ```text
-Field:    AI in healthcare
-Region:   Europe
-Months:   2027-05 → 2027-09
-Contact:  sponsorship
+Field:    Healthcare          (predefined dropdown)
+Region:   Slovenia            (predefined dropdown)
+Months:   Jun–Aug 2026        (multi-month picker)
+Contact:  organizer           (fixed — Confiva lead gen)
 Max:      10 conferences
+Optional: manual official URL  (crawl when search is thin)
 ```
 
 ---
 
 ## 3. Scope
 
-### In scope (v1)
+### In scope (v1 / v1.1)
 
 | Feature | Details |
 |---------|---------|
-| Streamlit UI | Single-page app: search form + results + download buttons |
-| Query generation | ~5 search queries per run (simplified, not full per-month expansion) |
+| Streamlit UI | Single-page app: search form + results + download |
+| Predefined fields | Dropdown only (Healthcare, Pharmaceuticals, Security, Cybersecurity, IT, AI) |
+| Predefined regions | Dropdown from `regions.py` (~35 profiles) |
+| Organizer contacts only | Fixed `contact_type=organizer` — Confiva lead gen, no sponsorship/CFP picker |
+| Query generation | Up to 18 localized queries per run (month sampling + year fallbacks) |
 | Web search | DuckDuckGo via `ddgs` — free, no API key |
-| URL scoring | Heuristic official-site picker + aggregator denylist |
-| Manual URL override | Optional: user can paste/fix an official conference URL |
-| Crawling | `requests` + BeautifulSoup + `trafilatura`; Playwright only if needed |
-| Extraction | Rule-based: `mailto:`, regex emails, keyword proximity for contact type |
+| URL scoring | Heuristic official-site picker + listing discovery |
+| Manual official URL | Optional text input — crawl directly when search is thin |
+| Crawling | `requests` + BeautifulSoup + `trafilatura`; Playwright fallback |
+| Extraction | Rule-based: `mailto:`, regex emails, organizer keyword proximity |
 | Validation | Email must appear verbatim in crawled page text |
-| Confidence | Simple deterministic rules (4–6 signals) |
-| Export | Download **CSV** and **JSON** buttons (in-memory data, no DB) |
+| Confidence | Simple deterministic rules |
+| Lead export | Excel download (one lead per conference); raw contacts CSV in debug panel |
+| Debug panel | Raw search hits table, crawl targets, listings, filtered/skipped URLs |
 
-### Out of scope (v1)
+### Out of scope (v1 / v1.1)
 
 | Feature | Deferred to |
 |---------|-------------|
+| Custom region UI | Later (backend hook exists; no form field for now) |
+| Free-form field input | Never in PoC — predefined fields only |
+| Contact type picker | Never in PoC — organizer only |
+| Automated tests | Later |
+| Success benchmark runs | Later |
 | Database (SQLite/PostgreSQL) | MVP Milestone 1 |
 | FastAPI backend | MVP |
 | Next.js frontend | MVP |
@@ -83,13 +95,11 @@ Max:      10 conferences
 | User authentication | MVP+ |
 | Search run history / persistence | MVP |
 | Manual edit UI for records | MVP |
-| XLSX export | MVP |
 | Scheduled / background jobs | MVP+ |
 | Full confidence model | MVP |
-| Pluggable search providers (Bing, SerpAPI) | MVP (paid) |
-| Organizer names, roles, committees | v2 (LLM or advanced parsing) |
+| Pluggable paid search providers | MVP |
+| Rich organizer profiles (LLM) | v2 / MVP Milestone 4 |
 | Email outreach | Never in MVP |
-| Cloud hosting | Optional; run locally for PoC |
 
 ---
 
@@ -132,8 +142,9 @@ End-to-end flow for one search run:
 ```text
 ┌─────────────────────────────────────────────────────────────┐
 │  STREAMLIT UI                                               │
-│  field, region, start/end month, contact type, max results  │
-│  [Run Search]  →  results table  →  [Download CSV/JSON]     │
+│  field (dropdown), region (dropdown), months, max results   │
+│  optional manual official URL                               │
+│  [Find Leads]  →  leads table  →  [Download Excel]          │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -182,8 +193,8 @@ End-to-end flow for one search run:
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  7. OUTPUT                                                  │
-│     display table in Streamlit                              │
-│     [Download CSV] [Download JSON]                          │
+│     one lead per conference in Streamlit                    │
+│     [Download Excel]  debug: raw search hits + raw contacts │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -191,7 +202,7 @@ End-to-end flow for one search run:
 
 #### 5.1 Query builder
 
-**Input:** `field`, `region`, `start_month`, `end_month`, `contact_type`
+**Input:** `field` (predefined), `region` (predefined), `selected_months`, `contact_type` (fixed: `organizer`)
 
 **Output:** ~5 query strings, e.g.:
 
@@ -327,7 +338,7 @@ One row per **email found** (not per conference):
     "field": str,
     "region": str,
     "email": str,
-    "contact_type": str,          # sponsorship | exhibitor | cfp | generic | committee | unknown
+    "contact_type": str,          # organizer (PoC); also sponsorship | exhibitor | … internally
     "source_url": str,
     "evidence_snippet": str,      # ~200 chars around the email in page text
     "confidence": int,            # 0–100
@@ -341,17 +352,17 @@ One row per **email found** (not per conference):
 ```json
 [
   {
-    "conference_name": "AI Health Summit 2027",
+    "conference_name": "Health Summit 2027",
     "conference_url": "https://example.com",
-    "field": "AI in healthcare",
-    "region": "Europe",
-    "email": "sponsors@example.com",
-    "contact_type": "sponsorship",
-    "source_url": "https://example.com/sponsors",
-    "evidence_snippet": "For sponsorship and exhibition opportunities contact sponsors@example.com",
+    "field": "Healthcare",
+    "region": "Slovenia",
+    "email": "events@example.com",
+    "contact_type": "organizer",
+    "source_url": "https://example.com/contact",
+    "evidence_snippet": "For event organisation contact events@example.com",
     "confidence": 80,
     "extraction_method": "regex+keyword",
-    "page_title": "Sponsorship Opportunities"
+    "page_title": "Contact the organisers"
   }
 ]
 ```
@@ -369,32 +380,33 @@ Single page: `poc/frontend/app.py`
 ### Sections
 
 1. **Search form**
-   - Field / topic (text)
-   - Region (text or dropdown: Europe, Worldwide, Slovenia, Germany, …)
-   - Start month (`YYYY-MM`)
-   - End month (`YYYY-MM`)
-   - Contact type (dropdown: sponsorship, exhibitor, cfp, organizer, any)
+   - Field (dropdown: predefined list in `config.FIELD_OPTIONS`)
+   - Region (dropdown: predefined profiles from `regions.py`)
+   - Months (multi-select picker: January of current year + 24 months forward)
    - Max conferences (slider: 5–20, default 10)
-   - Optional: manual official URL (text input)
-   - **Run Search** button
+   - Optional: **manual official URL** (text input — crawled in addition to search results)
+   - **Find Leads** button
+
+   Not in the form: custom region, free-form field, contact type (always organizer).
 
 2. **Progress / status**
-   - Step indicator: Searching → Scoring URLs → Crawling → Extracting
-   - Counts: queries run, hits found, sites selected, pages crawled, emails found
+   - Step indicator: Searching → Scoring → Listing discovery → Crawling → Done
+   - Counts: queries, search hits, filtered out, sites crawled, listing discoveries, leads, raw emails
 
 3. **Results table**
-   - Columns: conference, email, contact type, confidence, source URL
-   - Expandable row or sidebar: evidence snippet
+   - One row per conference lead: conference, organizer, email, quality, confidence, URL
+   - Expandable evidence snippets per lead
 
 4. **Download**
-   - **Download CSV** button
-   - **Download JSON** button
-   - Filename pattern: `conference_contacts_YYYYMMDD_HHMMSS.csv`
+   - **Download leads Excel** (`confiva_leads_YYYYMMDD_HHMMSS.xlsx`)
 
 5. **Debug panel (expandable)**
-   - Raw search hits
-   - URLs scored / skipped
-   - Pages crawled with no emails
+   - Generated queries
+   - **Raw search hits** (table: title, url, snippet, query, rank)
+   - Crawl targets (official sites)
+   - Listing pages used + warnings + discovered official URLs
+   - Filtered out (news/spam/stale) and skipped URLs (low score)
+   - Raw contacts CSV download (all emails before lead ranking)
 
 ---
 
@@ -414,8 +426,18 @@ poc/
     validator.py
     confidence.py
     exporter.py
+    regions.py
+    geo_filter.py
+    event_filter.py
+    lead_ranker.py
+    listing_discovery.py
+    domains.py
+    playwright_fetcher.py
+    cloud_bootstrap.py
   frontend/
-    app.py                 # Streamlit entry point
+    app.py
+    requirements.txt
+    .streamlit/config.toml
   requirements.txt
   README.md
 
@@ -429,13 +451,15 @@ docs/
 ## 9. Configuration defaults
 
 ```python
-MAX_QUERIES = 5
-RESULTS_PER_QUERY = 10
+MAX_QUERIES = 18
+RESULTS_PER_QUERY = 15
 MAX_CONFERENCE_SITES = 10
 MAX_PAGES_PER_SITE = 10
 MAX_CRAWL_DEPTH = 2
 REQUEST_DELAY_SECONDS = 1.5
 EVIDENCE_SNIPPET_CHARS = 200
+LISTING_MAX_PER_RUN = 3
+OFFICIAL_LINKS_PER_LISTING = 5
 ```
 
 ---
@@ -444,16 +468,17 @@ EVIDENCE_SNIPPET_CHARS = 200
 
 Build in slices so each step is testable:
 
-| Step | Build | Validates |
-|------|-------|-----------|
-| 1 | Streamlit shell + form + empty results | UI works |
-| 2 | Query builder + DuckDuckGo search | Discovery works |
-| 3 | URL scoring + show ranked hits | Site picking works |
-| 4 | Crawler on top N URLs | Can fetch contact pages |
-| 5 | Extractor + validator | Emails with evidence |
-| 6 | Confidence + results table | Scored output |
-| 7 | CSV + JSON download buttons | Export works |
-| 8 | Manual URL override + debug panel | Demo polish |
+| Step | Build | Status |
+|------|-------|--------|
+| 1 | Streamlit shell + form + results | Done |
+| 2 | Query builder + DuckDuckGo search | Done |
+| 3 | URL scoring + geo/event filters | Done |
+| 4 | Listing discovery + crawler | Done |
+| 5 | Extractor + validator + lead ranker | Done |
+| 6 | Confidence + leads table + Excel export | Done |
+| 7 | Debug panel (targets, listings, filtered/skipped) | Done |
+| 8 | Manual official URL + raw search hits table | Done |
+| 9 | Success benchmark on real queries | Deferred |
 
 ---
 
@@ -472,7 +497,7 @@ Build in slices so each step is testable:
 | Validation | Email ∈ source text | + JSON schema, evidence checks |
 | Confidence | ~6 simple rules | Full conference + organizer model |
 | Review | Re-run search | Edit records in UI |
-| Export | CSV + JSON | CSV + XLSX from DB |
+| Export | Excel leads + debug CSV | CSV + XLSX from DB |
 | Cost | $0 local | May include paid APIs |
 
 ---
@@ -510,15 +535,18 @@ Add if regex extraction leaves too many gaps:
 
 ---
 
-## 13. Known limitations (acceptable for v1)
+## 13. Known limitations (acceptable for v1 / v1.1)
 
+- Predefined fields and regions only — no custom region or free-text topic in the UI
+- Organizer contacts only — no sponsorship / CFP / exhibitor mode
 - DuckDuckGo may rate-limit heavy use; keep queries and delays modest
 - Regex misses emails embedded only in images or complex JS widgets
-- No organizer names or committee roles without LLM
-- Dates and locations will often be empty or wrong
+- Organizer names are heuristic (regex), not LLM-extracted
+- `event_date`, `location`, and `language` in lead export are often empty — acceptable for PoC
 - Aggregator sites may still slip through scoring
 - Results are lost when the Streamlit session ends (no persistence)
-- Future-dated conferences (e.g. 2027) may have sparse search results today
+- No automated test suite yet
+- Success benchmark not run yet
 
 ---
 
@@ -549,12 +577,15 @@ Opens at `http://localhost:8501`
 ## 16. Rules for implementation
 
 ```text
-Do not add a database in v1.
-Do not add an LLM in v1.
+Do not add a database in PoC.
+Do not add an LLM in PoC.
 Do not add authentication.
+Do not add automated tests yet.
 Do not use paid search or LLM APIs.
 Do not invent contact data.
 Always attach source_url and evidence_snippet to every email.
+Predefined fields and regions only — no free-form field or custom region UI.
+Organizer contacts only — no contact-type picker.
 Prefer working slices over big-bang implementation.
 Keep modules small and MVP-liftable.
 ```
@@ -563,11 +594,11 @@ Keep modules small and MVP-liftable.
 
 ## 17. Summary
 
-PoC v1 is a **free, local, Streamlit app** that runs:
+PoC v1.1 is a **free, local, Streamlit app** that runs:
 
-**search → score URLs → crawl → regex extract → validate → download CSV/JSON**
+**search → filter → score → listing discovery → crawl → extract → rank → download Excel**
 
-It proves the conference contact intelligence concept without the MVP's database, LLM, or multi-page frontend. Upgrade to LLM and full MVP only after v1 demonstrates real emails with evidence on real queries.
+It proves the Confiva organizer-lead concept without the MVP's database, LLM, or multi-page frontend. Upgrade to LLM and full MVP after benchmark validation on real queries.
 
 ---
 
@@ -583,26 +614,22 @@ PoC v1.1 targets **[Confiva](https://confiva.com/)** sales outreach. Confiva sel
 - Virtual events OK if region/language match (e.g. Slovenian virtual event for Slovenia search)
 - Export feeds a **separate email outreach tool** later
 
-**High-converting fields:** healthcare, pharmaceuticals, security, IT, AI — but any user-entered field must work.
+**Predefined fields** (dropdown in `config.FIELD_OPTIONS`): Healthcare, Pharmaceuticals, Security, Cybersecurity, IT, AI.
 
-### Region support (expandable beyond Slovenia)
+### Region support
 
-Built-in region profiles in `backend/regions.py`:
+Built-in region profiles in `backend/regions.py` (~35 countries/macros). User picks from a **dropdown only**.
 
-| Region | Cities | Languages |
-|--------|--------|-----------|
+| Examples | Cities | Languages |
+|----------|--------|-----------|
 | Slovenia | Ljubljana, Maribor, Celje, … | en, sl |
 | Croatia | Zagreb, Split, Rijeka, … | en, hr |
 | Germany | Berlin, Munich, Hamburg, … | en, de |
-| Austria | Vienna, Graz, Salzburg, … | en, de |
 | United Kingdom | London, Manchester, … | en |
-| United States | New York, San Francisco, … | en |
 | Europe | Brussels, Amsterdam, Paris, … | en |
-| Asia | Singapore, Tokyo, Hong Kong, … | en |
 | Worldwide | — | en |
-| **Custom** | User-entered area/city | en |
 
-Custom region supports arbitrary areas (DACH, Bavaria, Ljubljana only, etc.).
+**Custom region** (user-entered area like DACH or Bavaria) is deferred — backend has a hook (`custom_region`) but the UI does not expose it yet.
 
 ### v1.1 pipeline changes
 
@@ -615,7 +642,7 @@ search (localized query expansion)
   → crawl official sites only (organizer-focused pages)
   → extract + validate (never keep emails from listing domains)
   → lead ranker (one best contact per conference)
-  → export leads CSV/JSON
+  → export leads Excel (+ raw contacts CSV in debug)
 ```
 
 ### Listing-site discovery (v1.1.1)
@@ -656,6 +683,8 @@ source_url,evidence_snippet,confidence,language
 
 `contact_quality`: `named_organizer` | `role_email` | `generic_info` | `unknown`
 
+`language` is included in the schema but may be `null` — no extra extraction work planned for PoC.
+
 ### New backend modules
 
 ```text
@@ -673,3 +702,16 @@ backend/domains.py           # listing vs spam vs blocked domain helpers
 - Organizer name extraction is heuristic (regex), not LLM
 - DuckDuckGo rate limits still apply at scale
 - Adding a new country = add a `RegionProfile` entry in `regions.py`
+- No automated tests; success benchmark deferred
+
+### Remaining PoC work (agreed)
+
+| Item | Status |
+|------|--------|
+| Manual official URL (form + pipeline) | Done |
+| Raw search hits table in debug panel | Done |
+| Custom region UI | Deferred |
+| Free-form field input | Out of scope |
+| Contact type picker | Out of scope (organizer only) |
+| Automated tests | Deferred |
+| Success benchmark (3+ leads, &lt;5 min) | Deferred |

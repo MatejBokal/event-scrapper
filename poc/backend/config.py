@@ -1,6 +1,6 @@
 """Configuration defaults for PoC v1.1 — Confiva lead generation."""
 
-MAX_QUERIES = 18
+MAX_QUERIES = 30
 RESULTS_PER_QUERY = 15
 MAX_CONFERENCE_SITES = 10
 MAX_PAGES_PER_SITE = 10
@@ -67,6 +67,8 @@ LISTING_DOMAINS = [
     "conferencealert.com",
     "conferenceindex.org",
     "conference-series.com",
+    "conferenceseries.com",
+    "internationalconferencealerts.com",
     "papercept.net",
 ]
 

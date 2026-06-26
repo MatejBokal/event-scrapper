@@ -254,12 +254,13 @@ def _queries_for_language(
     synonyms = profile.event_synonyms.get(lang, profile.event_synonyms["en"])
     suffixes = ORGANIZER_SUFFIXES.get(lang, ORGANIZER_SUFFIXES["en"])
     queries: list[str] = []
+    location = locations[0] if locations else profile.display_name
 
-    for location in locations[:3]:
-        for synonym in synonyms[:2]:
-            base = f"{field_term} {synonym} {location}"
-            if year:
-                queries.append(f"{base} {year}".strip())
+    for synonym in synonyms:
+        base = f"{field_term} {synonym} {location}"
+        if year:
+            queries.append(f"{base} {year}".strip())
+        else:
             queries.append(base.strip())
 
     for suffix in suffixes[:1]:
@@ -285,15 +286,17 @@ def _build_month_queries(
     cities = locations[:2] if len(languages) == 1 else locations[:1]
     reserve_organizer = bool(cities)
     conference_slots = MONTH_QUERY_SLOTS - 1 if reserve_organizer else MONTH_QUERY_SLOTS
+    synonym_cursor = 0
 
     for year, month_num in sampled_months:
         for lang in languages:
             field_term = _field_term_for_language(lang, field_terms)
             synonyms = profile.event_synonyms.get(lang, profile.event_synonyms["en"])
-            synonym = synonyms[0]
             month_label = _month_label(year, month_num, lang)
 
             for city in cities:
+                synonym = synonyms[synonym_cursor % len(synonyms)]
+                synonym_cursor += 1
                 queries.append(f"{field_term} {synonym} {city} {month_label}".strip())
                 if len(queries) >= conference_slots:
                     break

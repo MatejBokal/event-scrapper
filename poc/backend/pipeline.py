@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlparse
+
 from backend.confidence import apply_confidence
 from backend.crawler import crawl_site, get_conference_name
-from backend.domains import is_listing_domain
+from backend.domains import is_denylisted_domain, is_listing_domain, is_spam_domain
 from backend.event_filter import filter_event_hits
 from backend.extractor import extract_emails_from_pages
 from backend.geo_filter import apply_geo_scoring
@@ -16,8 +18,8 @@ from backend.models import (
     PipelineResult,
     PipelineStats,
     ProgressCallback,
-    SearchHit,
     SearchParams,
+    SelectedSite,
 )
 from backend.query_builder import build_queries
 from backend.search_ddg import search_queries
@@ -30,6 +32,46 @@ def _emit(callback: ProgressCallback | None, stage: str, payload: dict) -> None:
         callback(stage, payload)
 
 
+def _normalize_manual_url(raw: str) -> str | None:
+    cleaned = raw.strip()
+    if not cleaned:
+        return None
+    if not cleaned.startswith(("http://", "https://")):
+        cleaned = f"https://{cleaned}"
+    parsed = urlparse(cleaned)
+    if not parsed.netloc:
+        return None
+    path = parsed.path.rstrip("/") or "/"
+    return f"{parsed.scheme}://{parsed.netloc}{path}"
+
+
+def _manual_selected_site(raw: str) -> tuple[SelectedSite | None, str | None]:
+    normalized = _normalize_manual_url(raw)
+    if not normalized:
+        return None, None
+    if is_spam_domain(normalized) or is_denylisted_domain(normalized):
+        return None, f"Manual URL blocked (spam/denylist): {normalized}"
+    return (
+        SelectedSite(
+            url=normalized,
+            title="Manual official URL",
+            url_score=999.0,
+            snippet="",
+            source="manual",
+        ),
+        None,
+    )
+
+
+def _prepend_manual_site(
+    crawl_targets: list[SelectedSite],
+    manual_site: SelectedSite,
+) -> list[SelectedSite]:
+    normalized = manual_site.url.rstrip("/")
+    without_dup = [site for site in crawl_targets if site.url.rstrip("/") != normalized]
+    return [manual_site, *without_dup]
+
+
 def run_pipeline(
     params: SearchParams,
     on_progress: ProgressCallback | None = None,
@@ -40,6 +82,10 @@ def run_pipeline(
     pages_without_emails = []
 
     try:
+        manual_site, manual_error = _manual_selected_site(params.manual_official_url)
+        if manual_error:
+            result.errors.append(manual_error)
+
         queries = build_queries(params)
         _emit(
             on_progress,
@@ -49,38 +95,54 @@ def run_pipeline(
 
         search_hits, search_errors = search_queries(queries, params)
         result.stats.queries_run = len(queries)
+        result.raw_search_hits = list(search_hits)
         for error in search_errors:
             result.errors.append(error)
 
-        if not search_hits:
+        if not search_hits and not manual_site:
             if search_errors:
                 result.errors.append(
                     "All search queries failed. Check your internet connection and try again."
                 )
             else:
-                result.errors.append("Search returned no results. Try broader terms or more months.")
+                result.errors.append(
+                    "Search returned no results. Try broader terms, more months, "
+                    "or paste a manual official URL."
+                )
             return result
 
-        filtered_hits, filtered_out = filter_event_hits(search_hits, params)
-        result.filtered_urls = filtered_out
-        result.stats.filtered_hits = len(filtered_out)
+        if search_hits:
+            filtered_hits, filtered_out = filter_event_hits(search_hits, params)
+            result.filtered_urls = filtered_out
+            result.stats.filtered_hits = len(filtered_out)
 
-        geo_scored = apply_geo_scoring(filtered_hits, params)
-        result.search_hits = geo_scored
-        result.stats.search_hits = len(geo_scored)
+            geo_scored = apply_geo_scoring(filtered_hits, params)
+            result.search_hits = geo_scored
+            result.stats.search_hits = len(geo_scored)
 
-        _emit(
-            on_progress,
-            "scoring",
-            {
-                "message": "Scoring and selecting conference sites...",
-                "hits": len(geo_scored),
-                "filtered_out": len(filtered_out),
-            },
-        )
+            _emit(
+                on_progress,
+                "scoring",
+                {
+                    "message": "Scoring and selecting conference sites...",
+                    "hits": len(geo_scored),
+                    "filtered_out": len(filtered_out),
+                },
+            )
 
-        selected, skipped = select_sites(geo_scored, params)
-        result.skipped_urls = skipped
+            selected, skipped = select_sites(geo_scored, params)
+            result.skipped_urls = skipped
+        else:
+            result.stats.search_hits = 0
+            selected = []
+            _emit(
+                on_progress,
+                "scoring",
+                {"message": "Skipping site selection — using manual official URL only."},
+            )
+
+        if manual_site and is_listing_domain(manual_site.url):
+            selected = _prepend_manual_site(selected, manual_site)
 
         _emit(
             on_progress,
@@ -95,6 +157,9 @@ def run_pipeline(
             selected,
             params,
         )
+        if manual_site and not is_listing_domain(manual_site.url):
+            crawl_targets = _prepend_manual_site(crawl_targets, manual_site)
+
         result.selected_sites = crawl_targets
         result.listing_sources = listing_sources
         result.listing_discoveries = discoveries
@@ -106,7 +171,7 @@ def run_pipeline(
         if not crawl_targets:
             result.errors.append(
                 "No official conference sites to crawl. Listing pages may not have linked "
-                "to official sites — try a different region or more months."
+                "to official sites — try a different region, more months, or a manual official URL."
             )
             return result
 
@@ -126,7 +191,7 @@ def run_pipeline(
                 continue
 
             try:
-                pages = crawl_site(site)
+                pages = crawl_site(site).pages
             except Exception as exc:
                 result.errors.append(f"Crawl failed for {site.url}: {exc}")
                 continue

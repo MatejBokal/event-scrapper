@@ -21,7 +21,7 @@ from backend.config import (
     REQUEST_DELAY_SECONDS,
     USER_AGENT,
 )
-from backend.models import CrawledPage, SelectedSite
+from backend.models import CrawledPage, CrawlSiteResult, SelectedSite
 from backend.playwright_fetcher import (
     PlaywrightSession,
     domain_prefers_playwright,
@@ -241,7 +241,7 @@ def fetch_single_page(
             active_playwright.close()
 
 
-def crawl_site(site: SelectedSite) -> list[CrawledPage]:
+def crawl_site(site: SelectedSite) -> CrawlSiteResult:
     start_url = _normalize_url(site.url)
     robots = _load_robots(start_url)
     session = requests.Session()
@@ -250,6 +250,8 @@ def crawl_site(site: SelectedSite) -> list[CrawledPage]:
     queue: deque[tuple[str, int]] = deque([(start_url, 0)])
     visited: set[str] = set()
     pages: list[CrawledPage] = []
+    first_failure_status: int | None = None
+    first_failure_message: str | None = None
 
     playwright = _open_playwright_session()
     try:
@@ -266,10 +268,19 @@ def crawl_site(site: SelectedSite) -> list[CrawledPage]:
 
             try:
                 final_url, html = _fetch_page_html(url, session, playwright)
-            except Exception:
+            except HTTPError as exc:
+                if first_failure_message is None:
+                    first_failure_status = exc.response.status_code if exc.response is not None else None
+                    first_failure_message = str(exc)
+                continue
+            except Exception as exc:
+                if first_failure_message is None:
+                    first_failure_message = str(exc)
                 continue
 
             if not html:
+                if first_failure_message is None:
+                    first_failure_message = "empty response"
                 continue
 
             text = _extract_text(html)
@@ -294,7 +305,28 @@ def crawl_site(site: SelectedSite) -> list[CrawledPage]:
         if playwright is not None:
             playwright.close()
 
-    return pages
+    if pages:
+        return CrawlSiteResult(pages=pages)
+
+    if first_failure_status == 403:
+        reason = "http_403"
+    elif first_failure_status == 401:
+        reason = "http_401"
+    elif first_failure_status == 429:
+        reason = "http_429"
+    elif first_failure_status is not None:
+        reason = f"http_{first_failure_status}"
+    elif first_failure_message:
+        reason = "fetch_failed"
+    else:
+        reason = "empty"
+
+    return CrawlSiteResult(
+        pages=[],
+        block_reason=reason,
+        http_status=first_failure_status,
+        error_message=first_failure_message,
+    )
 
 
 def get_conference_name(pages: list[CrawledPage]) -> str | None:

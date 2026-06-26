@@ -58,12 +58,21 @@ FIELD_TRANSLATIONS: dict[str, dict[str, str]] = {
     },
 }
 
-_EN_EVENTS = ("conference", "congress", "summit", "symposium", "event", "fair")
-_EN_EVENTS_EXPO = ("conference", "congress", "summit", "symposium", "convention", "expo")
+_EN_EVENTS = (
+    "conference",
+    "congress",
+    "summit",
+    "symposium",
+    "convention",
+    "expo",
+    "event",
+    "fair",
+)
 
 
 def _en_synonyms(*extra: str) -> dict[str, tuple[str, ...]]:
-    return {"en": _EN_EVENTS + extra if extra else _EN_EVENTS}
+    base = _EN_EVENTS + extra if extra else _EN_EVENTS
+    return {"en": base}
 
 
 REGION_PROFILES: dict[str, RegionProfile] = {
@@ -78,7 +87,7 @@ REGION_PROFILES: dict[str, RegionProfile] = {
         languages=("en", "sl"),
         event_synonyms={
             "en": _EN_EVENTS,
-            "sl": ("konferenca", "kongres", "simpozij", "dogodek", "sejem"),
+            "sl": ("konferenca", "kongres", "simpozij", "sejem", "expo", "dogodek"),
         },
         search_region="sl-sl",
         negative_locations=("zagreb", "hyderabad", "india"),
@@ -491,7 +500,7 @@ REGION_PROFILES: dict[str, RegionProfile] = {
         tlds=(".us",),
         phone_prefixes=("+1",),
         languages=("en",),
-        event_synonyms={"en": _EN_EVENTS_EXPO},
+        event_synonyms={"en": _EN_EVENTS},
         search_region="us-en",
     ),
     "Canada": RegionProfile(
@@ -503,8 +512,8 @@ REGION_PROFILES: dict[str, RegionProfile] = {
         phone_prefixes=("+1",),
         languages=("en", "fr"),
         event_synonyms={
-            "en": _EN_EVENTS_EXPO,
-            "fr": ("conférence", "congrès"),
+            "en": _EN_EVENTS,
+            "fr": ("conférence", "congrès", "sommet", "symposium", "expo", "salon", "événement"),
         },
         search_region="ca-en",
     ),

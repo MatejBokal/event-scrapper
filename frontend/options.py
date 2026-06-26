@@ -1,0 +1,51 @@
+"""Search form options — kept in sync with poc/backend."""
+
+FIELD_OPTIONS = [
+    "Healthcare",
+    "Pharmaceuticals",
+    "Security",
+    "Cybersecurity",
+    "IT",
+    "AI",
+]
+
+REGION_OPTIONS = [
+    "Slovenia",
+    "Croatia",
+    "Bosnia and Herzegovina",
+    "Serbia",
+    "Montenegro",
+    "North Macedonia",
+    "Austria",
+    "Hungary",
+    "Slovakia",
+    "Czech Republic",
+    "Poland",
+    "Germany",
+    "Switzerland",
+    "France",
+    "Belgium",
+    "Netherlands",
+    "Luxembourg",
+    "Italy",
+    "Spain",
+    "Portugal",
+    "United Kingdom",
+    "Ireland",
+    "Denmark",
+    "Sweden",
+    "Norway",
+    "Finland",
+    "Romania",
+    "Bulgaria",
+    "Greece",
+    "Turkey",
+    "United States",
+    "Canada",
+    "Australia",
+    "Europe",
+    "Asia",
+    "Worldwide",
+]
+
+MONTH_PICKER_HORIZON = 24

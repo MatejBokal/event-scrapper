@@ -4,7 +4,8 @@ Local proof-of-concept for **Confiva** ([confiva.com](https://confiva.com/)) sal
 
 Finds conference **organizer contacts** by field and region, with evidence-backed export for a separate email outreach tool.
 
-See [docs/poc_v1_spec.md](../docs/poc_v1_spec.md) for the full specification.
+See [docs/poc_v1_spec.md](../docs/poc_v1_spec.md) for the full specification.  
+**MVP plan:** [docs/mvp_roadmap.md](../docs/mvp_roadmap.md)
 
 ## Structure
 
@@ -42,21 +43,25 @@ Opens at http://localhost:8501
 - **Localized queries:** cities + local language (e.g. Slovenian `konferenca`, `kongres`)
 - **Geo + event filters:** drops news/blog posts, spam domains, stale years
 - **One lead per conference:** best organizer contact with quality label
-- **Export:** `confiva_leads_*.csv` / JSON for your email tool
+- **Export:** `confiva_leads_*.xlsx` (+ raw contacts CSV in debug panel)
+- **Manual official URL:** optional — crawled in addition to search (or alone if search is empty)
+- **Debug:** raw search hits table, crawl targets, listings, filtered URLs
 
 ## Usage
 
-1. Enter field (Healthcare, Pharma, Security, IT, AI, or anything).
-2. Pick region or use **Custom** for an area/city (e.g. DACH, Bavaria).
-3. Set month range for upcoming/recent events.
-4. Click **Find Leads**.
-5. Download CSV or JSON.
+1. Pick a **predefined field** (Healthcare, Pharmaceuticals, Security, Cybersecurity, IT, AI).
+2. Pick a **predefined region** from the dropdown.
+3. Select one or more **months** for upcoming/recent events.
+4. Optionally paste a **manual official URL** if discovery is thin.
+5. Click **Find Leads**.
+6. Download the leads Excel file.
 
-## Notes
+Organizer contacts only — no sponsorship/CFP mode. Custom region and free-text fields are not in the PoC UI.
 
-- Free stack: DuckDuckGo, requests, BeautifulSoup, trafilatura
-- No database, no LLM
+- Free stack: DuckDuckGo, requests, BeautifulSoup, trafilatura, Playwright
+- No database, no LLM, no automated tests yet
 - Virtual events are OK if they match region/language signals
+- `language` in export may be empty — acceptable for PoC
 - Raw contacts available in debug panel
 
 ## Deploy to Streamlit Community Cloud

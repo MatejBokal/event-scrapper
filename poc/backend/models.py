@@ -17,6 +17,7 @@ class SearchParams:
     contact_type: str = "organizer"
     max_conferences: int = 10
     custom_region: str = ""
+    manual_official_url: str = ""
 
     @property
     def start_month(self) -> str:
@@ -64,6 +65,18 @@ class CrawledPage:
     extracted_text: str
     conference_url: str
     html: str = ""
+
+
+@dataclass
+class CrawlSiteResult:
+    pages: list[CrawledPage] = field(default_factory=list)
+    block_reason: str | None = None
+    http_status: int | None = None
+    error_message: str | None = None
+
+    @property
+    def blocked(self) -> bool:
+        return bool(self.block_reason) and not self.pages
 
 
 @dataclass
@@ -163,6 +176,7 @@ class PipelineResult:
     params: SearchParams
     leads: list[LeadResult] = field(default_factory=list)
     contacts: list[ContactResult] = field(default_factory=list)
+    raw_search_hits: list[SearchHit] = field(default_factory=list)
     search_hits: list[SearchHit] = field(default_factory=list)
     selected_sites: list[SelectedSite] = field(default_factory=list)
     listing_sources: list[SelectedSite] = field(default_factory=list)

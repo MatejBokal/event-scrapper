@@ -57,10 +57,10 @@ if "progress_log" not in st.session_state:
 
 
 def _month_picker_options() -> dict[str, str]:
-    """Map display label (e.g. June 2026) to value (2026-06)."""
+    """Map display label (e.g. June 2026) to value (2026-06), from Jan of current year."""
     options: dict[str, str] = {}
     year = datetime.now().year
-    month = datetime.now().month
+    month = 1
     for _ in range(MONTH_PICKER_HORIZON):
         value = f"{year}-{month:02d}"
         label = datetime(year, month, 1).strftime("%B %Y")
@@ -73,8 +73,19 @@ def _month_picker_options() -> dict[str, str]:
 
 
 def _default_month_labels(options: dict[str, str]) -> list[str]:
-    labels = list(options.keys())
-    return labels[:3]
+    now = datetime.now()
+    defaults: list[str] = []
+    year = now.year
+    month = now.month
+    for _ in range(3):
+        label = datetime(year, month, 1).strftime("%B %Y")
+        if label in options:
+            defaults.append(label)
+        month += 1
+        if month > 12:
+            month = 1
+            year += 1
+    return defaults
 
 
 MONTH_OPTIONS = _month_picker_options()
@@ -105,6 +116,12 @@ with st.form("search_form"):
         )
         max_conferences = st.slider("Max conferences", min_value=5, max_value=20, value=10)
 
+    manual_official_url = st.text_input(
+        "Manual official URL (optional)",
+        placeholder="https://example.com/conference-2026",
+        help="Crawl this site in addition to search results when discovery is thin.",
+    )
+
     submitted = st.form_submit_button("Find Leads", type="primary", use_container_width=True)
 
 if submitted:
@@ -118,6 +135,7 @@ if submitted:
             selected_months=selected_months,
             contact_type="organizer",
             max_conferences=max_conferences,
+            manual_official_url=manual_official_url.strip(),
         )
 
         st.session_state.progress_log = []
@@ -201,6 +219,25 @@ if result:
 
             for query in build_queries(result.params):
                 st.write(query)
+
+        st.markdown("#### Raw search hits")
+        if result.raw_search_hits:
+            st.dataframe(
+                [
+                    {
+                        "title": hit.title,
+                        "url": hit.url,
+                        "snippet": hit.snippet[:120] + ("…" if len(hit.snippet) > 120 else ""),
+                        "query": hit.source_query,
+                        "rank": hit.rank,
+                    }
+                    for hit in result.raw_search_hits
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.caption("No search hits — manual URL-only run or search returned nothing.")
 
         st.markdown("#### Crawl targets (official sites)")
         if result.selected_sites:
