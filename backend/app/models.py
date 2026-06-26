@@ -115,6 +115,7 @@ class Conference(Base):
     month_year: Mapped[str | None] = mapped_column(Text)
     location: Mapped[str | None] = mapped_column(Text)
     country: Mapped[str | None] = mapped_column(Text)
+    language: Mapped[str | None] = mapped_column(Text)
     official_url: Mapped[str] = mapped_column(Text, nullable=False)
     official_url_normalized: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     description: Mapped[str | None] = mapped_column(Text)

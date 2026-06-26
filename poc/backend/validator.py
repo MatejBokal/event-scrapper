@@ -48,6 +48,12 @@ def validate_hits(
                 confidence=0,
                 extraction_method=hit.extraction_method,
                 page_title=hit.page_title,
+                organizer_name=hit.organizer_name,
+                organizer_role=hit.organizer_role,
+                organization=hit.organization,
+                phone=hit.phone,
+                website=hit.website,
+                linkedin_url=hit.linkedin_url,
             )
         )
 

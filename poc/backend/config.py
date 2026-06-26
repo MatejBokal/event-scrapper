@@ -1,5 +1,22 @@
 """Configuration defaults for PoC v1.1 — Confiva lead generation."""
 
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+
+def _load_repo_dotenv() -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    repo_root = Path(__file__).resolve().parents[2]
+    load_dotenv(repo_root / ".env")
+
+
+_load_repo_dotenv()
+
 MAX_QUERIES = 30
 RESULTS_PER_QUERY = 15
 MAX_CONFERENCE_SITES = 10
@@ -171,3 +188,59 @@ FIELD_OPTIONS = [
 ]
 
 DEFAULT_FIELD_SUGGESTIONS = FIELD_OPTIONS
+
+# Phase 8 — Perplexity Sonar LLM extraction
+LLM_MAX_PAGE_CHARS = 12_000
+LLM_REQUEST_DELAY_SECONDS = 0.3
+LLM_MAX_PAGES_PER_SITE = 3
+
+LLM_PATH_KEYWORDS_ORGANIZER = (
+    "contact",
+    "organizers",
+    "organisers",
+    "organizing",
+    "organising",
+    "committee",
+    "about",
+    "team",
+    "registration",
+)
+
+LLM_PATH_KEYWORDS_LOW_PRIORITY = (
+    "sponsor",
+    "sponsorship",
+    "cfp",
+    "call-for-papers",
+    "call_for_papers",
+    "exhibitor",
+    "exhibitors",
+    "exhibition",
+    "abstract",
+)
+
+
+def get_perplexity_api_key() -> str | None:
+    key = os.environ.get("PERPLEXITY_API_KEY", "").strip()
+    return key or None
+
+
+def get_perplexity_model() -> str:
+    return os.environ.get("PERPLEXITY_MODEL", "sonar").strip() or "sonar"
+
+
+def get_llm_max_pages_per_site() -> int:
+    raw = os.environ.get("LLM_MAX_PAGES_PER_SITE", str(LLM_MAX_PAGES_PER_SITE)).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return LLM_MAX_PAGES_PER_SITE
+    return max(1, value)
+
+
+def is_llm_extraction_enabled() -> bool:
+    if not get_perplexity_api_key():
+        return False
+    flag = os.environ.get("EXTRACTION_USE_LLM", "").strip().lower()
+    if flag in ("0", "false", "no"):
+        return False
+    return True

@@ -46,6 +46,12 @@ def score_contact(contact: ContactResult, page_text: str = "") -> int:
     if contact.extraction_method == "mailto":
         score += 10
 
+    if contact.extraction_method == "llm":
+        score += 15
+
+    if contact.organizer_name:
+        score += 10
+
     if not _is_aggregator(contact.source_url):
         score += 10
 

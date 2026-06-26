@@ -135,6 +135,7 @@ def get_conference(conference_id: uuid.UUID, db: Session = Depends(get_db)) -> C
         month_year=conference.month_year,
         location=conference.location,
         country=conference.country,
+        language=conference.language,
         official_url=conference.official_url,
         official_url_normalized=conference.official_url_normalized,
         description=conference.description,

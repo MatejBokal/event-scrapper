@@ -82,7 +82,7 @@ Backend: Python FastAPI
 Database: PostgreSQL
 Crawler: Playwright + BeautifulSoup
 Background jobs: Celery + Redis, or local async jobs first
-LLM extraction: local LLM or configurable OpenAI-compatible endpoint
+LLM extraction: **Perplexity Sonar API** (OpenAI-compatible; `disable_search` on crawled text only)
 Export: CSV/XLSX
 ```
 

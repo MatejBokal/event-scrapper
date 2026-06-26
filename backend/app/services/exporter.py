@@ -94,7 +94,7 @@ def fetch_lead_rows(db: Session) -> list[dict]:
                 "source_url": evidence.source_url if evidence else None,
                 "evidence_snippet": evidence.extracted_text_snippet if evidence else None,
                 "confidence": primary.confidence_score,
-                "language": None,
+                "language": conference.language,
             }
         )
 

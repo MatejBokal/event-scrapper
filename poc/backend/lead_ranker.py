@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import re
 
+from backend.conference_metadata import enrich_lead_from_metadata, event_date_label
 from backend.config import GENERIC_EMAIL_PREFIXES
-from backend.models import ContactResult, LeadResult, SearchParams
+from backend.models import ConferenceLlmMetadata, ContactResult, LeadResult, SearchParams
 
 ORGANIZER_KEYWORDS = (
     "organizer",
@@ -116,7 +117,12 @@ def _should_skip_for_organizer_focus(contact: ContactResult) -> bool:
     return False
 
 
-def build_leads(contacts: list[ContactResult], params: SearchParams) -> list[LeadResult]:
+def build_leads(
+    contacts: list[ContactResult],
+    params: SearchParams,
+    conference_metadata: dict[str, ConferenceLlmMetadata] | None = None,
+) -> list[LeadResult]:
+    metadata_by_url = conference_metadata or {}
     grouped: dict[str, list[ContactResult]] = {}
     for contact in contacts:
         if params.contact_type == "organizer" and _should_skip_for_organizer_focus(contact):
@@ -125,19 +131,20 @@ def build_leads(contacts: list[ContactResult], params: SearchParams) -> list[Lea
 
     leads: list[LeadResult] = []
     for conference_url, conference_contacts in grouped.items():
+        meta = metadata_by_url.get(conference_url.rstrip("/"))
         candidates: list[LeadResult] = []
         for contact in conference_contacts:
             context = contact.evidence_snippet
-            organizer_name = _extract_organizer_name(context)
-            organizer_role = _extract_organizer_role(context)
+            organizer_name = contact.organizer_name or _extract_organizer_name(context)
+            organizer_role = contact.organizer_role or _extract_organizer_role(context)
             contact_quality = classify_contact_quality(contact.email, context, organizer_name)
 
             candidates.append(
                 LeadResult(
-                    conference_name=contact.conference_name,
+                    conference_name=contact.conference_name or (meta.name if meta else None),
                     conference_url=contact.conference_url,
-                    event_date=None,
-                    location=None,
+                    event_date=event_date_label(meta),
+                    location=meta.location if meta else None,
                     field=contact.field,
                     region=contact.region,
                     organizer_name=organizer_name,
@@ -147,7 +154,7 @@ def build_leads(contacts: list[ContactResult], params: SearchParams) -> list[Lea
                     source_url=contact.source_url,
                     evidence_snippet=contact.evidence_snippet,
                     confidence=contact.confidence,
-                    language=None,
+                    language=meta.language if meta else None,
                 )
             )
 
@@ -155,7 +162,7 @@ def build_leads(contacts: list[ContactResult], params: SearchParams) -> list[Lea
             continue
 
         best = max(candidates, key=_contact_priority)
-        leads.append(best)
+        leads.append(enrich_lead_from_metadata(best, meta))
 
     leads.sort(key=lambda lead: _contact_priority(lead), reverse=True)
     return leads

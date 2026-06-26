@@ -36,6 +36,14 @@ API_HOST=127.0.0.1
 API_PORT=8001
 ```
 
+Phase 8 (LLM extraction):
+
+```env
+PERPLEXITY_API_KEY=pplx-...
+EXTRACTION_USE_LLM=true
+# PERPLEXITY_MODEL=sonar
+```
+
 The review UI can also use `API_BASE_URL` (defaults to `http://127.0.0.1:8001`).
 
 ### 2. Database migrations

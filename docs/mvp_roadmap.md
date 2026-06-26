@@ -20,7 +20,7 @@ Phased plan to evolve the **PoC v1.1** into a **production MVP** for Confiva sal
 | FastAPI | Done — Phases 2–4 (CRUD, search runs, crawl persistence) |
 | Persistence | Search + crawl in DB; full pipeline extraction not wired yet |
 | Auth | Not started |
-| LLM extraction | Not started (optional v2) |
+| LLM extraction | **Perplexity Sonar** — wired; enable with `PERPLEXITY_API_KEY` |
 | Success benchmark | Deferred |
 
 **PoC proves:** we can find organizer emails with source evidence on real queries.
@@ -53,7 +53,7 @@ The MVP is complete when a user can:
 **Optional before MVP (gate):**
 
 - PoC success benchmark (3+ leads with evidence, &lt;5 min)
-- PoC v2 with local Ollama if regex extraction is too weak
+- PoC v2 with **Perplexity** LLM extraction if regex extraction is too weak
 
 ---
 
@@ -68,7 +68,7 @@ The MVP is complete when a user can:
 | Frontend (MVP) | **Streamlit → Next.js** | Keep Streamlit calling API first; Next.js when review UI needs grow |
 | Crawler | requests + BS4 + trafilatura + Playwright | Same as PoC |
 | Search | DuckDuckGo via `ddgs` | Free; paid providers later |
-| LLM | Deferred | Add Ollama in v2 if needed |
+| LLM | **Perplexity Sonar** (Phase 8) | Regex default; `EXTRACTION_USE_LLM=true` when wired |
 | Auth | Supabase Auth (Phase 7) | RLS after single-user MVP works |
 
 **Access rule:** pipeline and bulk writes use **service role** or direct Postgres URL on the server only. Never expose service role to the browser.
@@ -154,7 +154,7 @@ See Phase 1 migration task for full SQL.
 | Task | Deliverable |
 |------|-------------|
 | Run benchmark queries | Healthcare + Slovenia, 3 months; log leads, time, evidence |
-| Review lead quality | Decide: proceed to MVP or add PoC v2 (Ollama) first |
+| Review lead quality | Decide: proceed to MVP or add PoC v2 (Perplexity LLM) first |
 | Document results | Short note in repo or issue |
 
 **Exit criteria:** Team agrees extraction is good enough to store and sell against, or v2 is scoped.
@@ -278,12 +278,28 @@ See Phase 1 migration task for full SQL.
 
 | Item | When |
 |------|------|
-| LLM extraction (Ollama / API) | If regex leaves too many gaps |
+| LLM extraction (**Perplexity Sonar**) | If regex leaves too many gaps — see § Phase 8 design below |
 | Custom region UI | When sales needs DACH etc. |
 | Automated tests | CI for API + persist layer |
 | Scheduled searches | Cron / Supabase pg_cron |
 | Paid search providers | Scale beyond DuckDuckGo |
 | Email outreach module | Separate tool; feed from export |
+
+**Phase 8 LLM design (locked):**
+
+| Item | Choice |
+|------|--------|
+| Provider | **Perplexity Sonar API** ([OpenAI-compatible](https://docs.perplexity.ai/docs/sonar/openai-compatibility)) |
+| Env | `PERPLEXITY_API_KEY`, optional `PERPLEXITY_MODEL` (default `sonar`) |
+| Toggle | Enabled when `PERPLEXITY_API_KEY` is set; set `EXTRACTION_USE_LLM=false` to disable |
+| Input | Crawled page text only (same as blueprint §9) |
+| API flags | `disable_search: true` — must not web-search; only use provided `PAGE_TEXT` |
+| Page selection | Top **3** scored pages per site — **one combined API call** fills conference + organizers |
+| Persisted fields | Conference: name, dates, location, country, description, language. Organizer: name, role, org, phone, website, LinkedIn |
+| Output | JSON organizers + conference fields; same validator as regex (email in source text) |
+| Fallback | Regex extraction when key missing, flag off, or LLM call fails |
+
+Ollama / local LLM: **skipped** — Perplexity only.
 
 ---
 
@@ -322,6 +338,7 @@ See Phase 1 migration task for full SQL.
 | Store raw contacts | Yes — all emails in `organizers`, not only the lead |
 | Dedupe conferences | By normalized `official_url` across runs |
 | Evidence | Required — no email without `source_evidence` row |
+| LLM provider (Phase 8) | **Perplexity Sonar** — not Ollama |
 | PoC Streamlit | Keep until Phase 5/6 API client is ready |
 
 ---
@@ -337,7 +354,7 @@ Phase 4  Crawl + evidence → DB
 Phase 5  Full pipeline → DB (automated MVP core)
 Phase 6  Review / edit UI
 Phase 7  Auth + RLS
-Phase 8  LLM, tests, scheduling (post-MVP)
+Phase 8  Perplexity LLM extraction, tests, scheduling (post-MVP)
 ```
 
 **Start here:** Phase 5 (full pipeline → DB: extract, rank, leads).

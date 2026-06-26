@@ -16,6 +16,7 @@ from app.services.poc_bridge import (
     extract_emails_from_pages,
     get_conference_name,
     is_listing_domain,
+    is_llm_extraction_enabled,
     validate_hits,
 )
 from app.utils import normalize_official_url
@@ -25,6 +26,27 @@ EVIDENCE_SNIPPET_MAX = 500
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _apply_conference_metadata(conference: Conference, metadata) -> None:
+    if metadata is None:
+        return
+    if metadata.name:
+        conference.name = metadata.name
+    if metadata.start_date:
+        conference.start_date = metadata.start_date
+    if metadata.end_date:
+        conference.end_date = metadata.end_date
+    if metadata.month_year:
+        conference.month_year = metadata.month_year
+    if metadata.location:
+        conference.location = metadata.location
+    if metadata.country:
+        conference.country = metadata.country
+    if metadata.description:
+        conference.description = metadata.description
+    if metadata.language:
+        conference.language = metadata.language
 
 
 def _db_page_to_poc(page: CrawledPage, conference_url: str) -> PocCrawledPage:
@@ -51,8 +73,12 @@ def _persist_organizer(
         id=uuid.uuid4(),
         conference_id=conference.id,
         search_run_id=run.id,
-        name=None,
-        role=None,
+        name=getattr(contact, "organizer_name", None),
+        role=getattr(contact, "organizer_role", None),
+        organization=getattr(contact, "organization", None),
+        phone=getattr(contact, "phone", None),
+        website=getattr(contact, "website", None),
+        linkedin_url=getattr(contact, "linkedin_url", None),
         email=contact.email.strip().lower(),
         contact_type=contact.contact_type,
         contact_quality=contact_quality,
@@ -124,6 +150,7 @@ def execute_extract_run(db: Session, run: SearchRun) -> SearchRun:
 
     all_contacts = []
     organizers_by_key: dict[tuple[uuid.UUID, str], Organizer] = {}
+    conference_metadata_by_url: dict[str, object] = {}
 
     for conference_id, conference_pages in pages_by_conference.items():
         conference = db.get(Conference, conference_id)
@@ -133,7 +160,14 @@ def execute_extract_run(db: Session, run: SearchRun) -> SearchRun:
         poc_pages = [_db_page_to_poc(page, conference.official_url) for page in conference_pages]
         conference_name = get_conference_name(poc_pages) or conference.name
 
-        raw_hits = extract_emails_from_pages(poc_pages, params, conference_name)
+        extract_result = extract_emails_from_pages(poc_pages, params, conference_name)
+        if extract_result.conference_metadata:
+            conference_metadata_by_url[conference.official_url.rstrip("/")] = (
+                extract_result.conference_metadata
+            )
+            _apply_conference_metadata(conference, extract_result.conference_metadata)
+
+        raw_hits = extract_result.hits
         contacts = validate_hits(raw_hits, params)
         contacts = [
             contact
@@ -150,7 +184,7 @@ def execute_extract_run(db: Session, run: SearchRun) -> SearchRun:
             quality = classify_contact_quality(
                 contact.email,
                 contact.evidence_snippet,
-                None,
+                contact.organizer_name,
             )
             organizer = _persist_organizer(
                 db,
@@ -163,7 +197,7 @@ def execute_extract_run(db: Session, run: SearchRun) -> SearchRun:
             _persist_organizer_evidence(db, run, conference, organizer, contact)
             organizers_by_key[(conference_id, contact.email.strip().lower())] = organizer
 
-    leads = build_leads(all_contacts, params)
+    leads = build_leads(all_contacts, params, conference_metadata_by_url)
     leads_persisted = 0
 
     for lead in leads:
@@ -200,6 +234,7 @@ def execute_extract_run(db: Session, run: SearchRun) -> SearchRun:
             "emails_found": len(all_contacts),
             "leads_found": len(leads),
             "primary_leads_persisted": leads_persisted,
+            "llm_extraction_enabled": is_llm_extraction_enabled(),
         }
     )
 

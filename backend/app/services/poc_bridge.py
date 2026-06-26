@@ -14,6 +14,7 @@ from backend.crawler import crawl_site, get_conference_name  # noqa: E402
 from backend.domains import is_denylisted_domain, is_listing_domain, is_spam_domain  # noqa: E402
 from backend.event_filter import filter_event_hits  # noqa: E402
 from backend.extractor import extract_emails_from_pages  # noqa: E402
+from backend.config import is_llm_extraction_enabled  # noqa: E402
 from backend.geo_filter import apply_geo_scoring  # noqa: E402
 from backend.lead_ranker import build_leads, classify_contact_quality  # noqa: E402
 from backend.listing_discovery import expand_sites_via_listings  # noqa: E402
@@ -41,6 +42,7 @@ __all__ = [
     "crawl_site",
     "get_conference_name",
     "extract_emails_from_pages",
+    "is_llm_extraction_enabled",
     "validate_hits",
     "apply_confidence",
     "build_leads",

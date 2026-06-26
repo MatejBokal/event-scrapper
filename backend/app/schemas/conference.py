@@ -35,6 +35,7 @@ class ConferenceCreate(BaseModel):
     location: str | None = None
     country: str | None = None
     description: str | None = None
+    language: str | None = None
     status: str = "discovered"
     confidence_score: int = 0
 
@@ -50,6 +51,7 @@ class ConferenceUpdate(BaseModel):
     location: str | None = None
     country: str | None = None
     description: str | None = None
+    language: str | None = None
     status: str | None = None
     confidence_score: int | None = None
     crawl_block_reason: str | None = None
@@ -69,6 +71,7 @@ class ConferenceRead(BaseModel):
     month_year: str | None
     location: str | None
     country: str | None
+    language: str | None
     official_url: str
     official_url_normalized: str
     description: str | None

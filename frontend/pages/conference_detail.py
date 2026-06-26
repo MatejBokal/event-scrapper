@@ -93,7 +93,10 @@ with tab_overview:
         field = st.text_input("Field", conference.get("field") or "")
         region = st.text_input("Region", conference.get("region") or "")
         location = st.text_input("Location", conference.get("location") or "")
+        country = st.text_input("Country", conference.get("country") or "")
         month_year = st.text_input("Month / year", conference.get("month_year") or "")
+        language = st.text_input("Language", conference.get("language") or "")
+        description = st.text_area("Description", conference.get("description") or "")
         official_url = st.text_input("Official URL", conference["official_url"])
         status = st.selectbox(
             "Status",
@@ -116,7 +119,10 @@ with tab_overview:
                     "field": field or None,
                     "region": region or None,
                     "location": location or None,
+                    "country": country or None,
                     "month_year": month_year or None,
+                    "language": language or None,
+                    "description": description or None,
                     "official_url": official_url,
                     "status": status,
                     "confidence_score": confidence,

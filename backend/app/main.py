@@ -5,8 +5,8 @@ from app.api import conferences, export, organizers, search_runs
 
 app = FastAPI(
     title="Conference Organizer Lead Finder API",
-    version="0.7.0",
-    description="MVP Phase 7 — crawl-blocked sites saved for manual review",
+    version="0.8.0",
+    description="MVP Phase 8 — Perplexity LLM extraction on crawled page text",
 )
 
 app.add_middleware(

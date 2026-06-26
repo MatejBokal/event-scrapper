@@ -1,4 +1,4 @@
-"""Rule-based email extraction from crawled pages — no LLM."""
+"""Rule-based email extraction from crawled pages; optional Perplexity LLM pass."""
 
 from __future__ import annotations
 
@@ -12,8 +12,9 @@ from backend.config import (
     EVIDENCE_SNIPPET_CHARS,
     GENERIC_EMAIL_PREFIXES,
     PREFERRED_PATH_KEYWORDS,
+    is_llm_extraction_enabled,
 )
-from backend.models import CrawledPage, RawEmailHit, SearchParams
+from backend.models import CrawledPage, ExtractEmailsResult, RawEmailHit, SearchParams
 
 EMAIL_PATTERN = re.compile(
     r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"
@@ -149,7 +150,36 @@ def _resolve_contact_type(
     return "unknown"
 
 
-def extract_emails_from_pages(
+def _merge_hits(regex_hits: list[RawEmailHit], llm_hits: list[RawEmailHit]) -> list[RawEmailHit]:
+    merged: dict[tuple[str, str], RawEmailHit] = {}
+    for hit in regex_hits:
+        merged[(hit.email, hit.source_url)] = hit
+
+    for hit in llm_hits:
+        key = (hit.email, hit.source_url)
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = hit
+            continue
+        if hit.organizer_name and not existing.organizer_name:
+            existing.organizer_name = hit.organizer_name
+        if hit.organizer_role and not existing.organizer_role:
+            existing.organizer_role = hit.organizer_role
+        if hit.organization and not existing.organization:
+            existing.organization = hit.organization
+        if hit.phone and not existing.phone:
+            existing.phone = hit.phone
+        if hit.website and not existing.website:
+            existing.website = hit.website
+        if hit.linkedin_url and not existing.linkedin_url:
+            existing.linkedin_url = hit.linkedin_url
+        if hit.conference_name and not existing.conference_name:
+            existing.conference_name = hit.conference_name
+
+    return list(merged.values())
+
+
+def _regex_hits_from_pages(
     pages: list[CrawledPage],
     params: SearchParams,
     conference_name: str | None,
@@ -205,3 +235,20 @@ def extract_emails_from_pages(
             )
 
     return hits
+
+
+def extract_emails_from_pages(
+    pages: list[CrawledPage],
+    params: SearchParams,
+    conference_name: str | None,
+) -> ExtractEmailsResult:
+    hits = _regex_hits_from_pages(pages, params, conference_name)
+    metadata = None
+
+    if is_llm_extraction_enabled():
+        from backend.llm_extractor import extract_llm_for_site
+
+        llm_hits, metadata = extract_llm_for_site(pages, hits, params, conference_name)
+        hits = _merge_hits(hits, llm_hits)
+
+    return ExtractEmailsResult(hits=hits, conference_metadata=metadata)

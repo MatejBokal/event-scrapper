@@ -175,6 +175,8 @@ def run_pipeline(
             )
             return result
 
+        conference_metadata_by_url: dict[str, object] = {}
+
         for index, site in enumerate(crawl_targets, start=1):
             _emit(
                 on_progress,
@@ -200,8 +202,10 @@ def run_pipeline(
             result.stats.pages_crawled += len(pages)
 
             conference_name = get_conference_name(pages) or site.title
-            raw_hits = extract_emails_from_pages(pages, params, conference_name)
-            contacts = validate_hits(raw_hits, params)
+            extract_result = extract_emails_from_pages(pages, params, conference_name)
+            if extract_result.conference_metadata:
+                conference_metadata_by_url[site.url.rstrip("/")] = extract_result.conference_metadata
+            contacts = validate_hits(extract_result.hits, params)
             contacts = [
                 contact
                 for contact in contacts
@@ -220,7 +224,7 @@ def run_pipeline(
         result.crawled_pages = all_crawled_pages
         result.pages_without_emails = pages_without_emails
         result.contacts = all_contacts
-        result.leads = build_leads(all_contacts, params)
+        result.leads = build_leads(all_contacts, params, conference_metadata_by_url)
         result.stats.emails_found = len(all_contacts)
         result.stats.leads_found = len(result.leads)
         result.stats.pages_without_emails = len(pages_without_emails)

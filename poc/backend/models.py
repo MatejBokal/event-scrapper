@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any, Callable, Literal
 
 
 ProgressCallback = Callable[[str, dict[str, Any]], None]
 
-ExtractionMethod = Literal["mailto", "regex", "regex+keyword"]
+ExtractionMethod = Literal["mailto", "regex", "regex+keyword", "llm"]
 
 
 @dataclass
@@ -89,6 +90,30 @@ class RawEmailHit:
     contact_type: str
     conference_url: str
     conference_name: str | None = None
+    organizer_name: str | None = None
+    organizer_role: str | None = None
+    organization: str | None = None
+    phone: str | None = None
+    website: str | None = None
+    linkedin_url: str | None = None
+
+
+@dataclass
+class ConferenceLlmMetadata:
+    name: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    month_year: str | None = None
+    location: str | None = None
+    country: str | None = None
+    description: str | None = None
+    language: str | None = None
+
+
+@dataclass
+class ExtractEmailsResult:
+    hits: list[RawEmailHit]
+    conference_metadata: ConferenceLlmMetadata | None = None
 
 
 @dataclass
@@ -104,6 +129,12 @@ class ContactResult:
     confidence: int
     extraction_method: str
     page_title: str | None
+    organizer_name: str | None = None
+    organizer_role: str | None = None
+    organization: str | None = None
+    phone: str | None = None
+    website: str | None = None
+    linkedin_url: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -118,6 +149,12 @@ class ContactResult:
             "confidence": self.confidence,
             "extraction_method": self.extraction_method,
             "page_title": self.page_title,
+            "organizer_name": self.organizer_name,
+            "organizer_role": self.organizer_role,
+            "organization": self.organization,
+            "phone": self.phone,
+            "website": self.website,
+            "linkedin_url": self.linkedin_url,
         }
 
 

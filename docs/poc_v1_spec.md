@@ -91,7 +91,7 @@ Optional: manual official URL  (crawl when search is thin)
 | Database (SQLite/PostgreSQL) | MVP Milestone 1 |
 | FastAPI backend | MVP |
 | Next.js frontend | MVP |
-| LLM extraction (Ollama, Groq, OpenAI) | v2 / MVP Milestone 4 |
+| LLM extraction (Perplexity Sonar) | v2 / MVP Milestone 4 |
 | User authentication | MVP+ |
 | Search run history / persistence | MVP |
 | Manual edit UI for records | MVP |
@@ -114,7 +114,7 @@ Everything runs **locally** on the developer's machine.
 | HTTP / parse | **requests**, **BeautifulSoup4**, **trafilatura** | $0 | Plain HTTP first |
 | JS-rendered sites | **Playwright** (optional fallback) | $0 | Only if plain HTTP fails |
 | Export | **csv** / **json** stdlib or **pandas** | $0 | Bytes returned to Streamlit download buttons |
-| LLM | **None in v1** | $0 | Add Ollama in v2 if regex extraction is insufficient |
+| LLM | **None in v1** | $0 | **Perplexity Sonar** in v2 / Phase 8 if regex is insufficient |
 
 ### Services to avoid (paid or quota-limited)
 
@@ -123,15 +123,14 @@ Everything runs **locally** on the developer's machine.
 | Bing Search API | Retired; replacement is paid (~$14+/1k queries) |
 | SerpAPI | ~100 free searches/month — too limited |
 | Google Custom Search | 100 queries/day; requires API setup |
-| OpenAI / Anthropic | Paid per token |
-| Groq | Free tier exists but is a cloud dependency; use only as optional v2 fallback |
+| OpenAI / Anthropic / Groq | Skipped — **Perplexity Sonar** chosen for v2 / Phase 8 |
 
 ### Prerequisites
 
 - Python 3.11+
 - pip + virtual environment
 - (Optional) Playwright browsers: `playwright install` if JS crawling is enabled
-- No Ollama required for v1
+- No LLM required for v1 (`PERPLEXITY_API_KEY` only needed for Phase 8)
 
 ---
 
@@ -521,9 +520,10 @@ poc/exporter.py        →  backend/app/services/exporter.py
 
 Add if regex extraction leaves too many gaps:
 
-- **Ollama** (local, free) for structured extraction on crawled text only
+- **Perplexity Sonar API** (`PERPLEXITY_API_KEY`) — OpenAI-compatible chat completions
+- `disable_search: true` so the model uses only crawled page text (no web lookup)
 - Keep same validation: email must appear in source text
-- Same Streamlit UI; swap extractor backend
+- Same Streamlit UI; swap extractor backend when `EXTRACTION_USE_LLM=true`
 
 ### MVP milestones (from blueprint)
 
