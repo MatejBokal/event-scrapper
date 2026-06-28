@@ -19,7 +19,14 @@ from app.services.poc_bridge import (
     is_llm_extraction_enabled,
     validate_hits,
 )
+from app.services.poc_bridge import setup_logging as _setup_logging
 from app.utils import normalize_official_url
+
+_setup_logging()
+
+import logging
+
+log = logging.getLogger("leadfinder.extract")
 
 EVIDENCE_SNIPPET_MAX = 500
 
@@ -116,6 +123,7 @@ def _persist_organizer_evidence(
 
 
 def execute_extract_run(db: Session, run: SearchRun) -> SearchRun:
+    log.info("Extract started for run %s", run.id)
     run = db.scalar(
         select(SearchRun).where(SearchRun.id == run.id).options(joinedload(SearchRun.results))
     )
@@ -151,6 +159,7 @@ def execute_extract_run(db: Session, run: SearchRun) -> SearchRun:
     all_contacts = []
     organizers_by_key: dict[tuple[uuid.UUID, str], Organizer] = {}
     conference_metadata_by_url: dict[str, object] = {}
+    llm_audit_entries: list[dict] = []
 
     for conference_id, conference_pages in pages_by_conference.items():
         conference = db.get(Conference, conference_id)
@@ -161,6 +170,8 @@ def execute_extract_run(db: Session, run: SearchRun) -> SearchRun:
         conference_name = get_conference_name(poc_pages) or conference.name
 
         extract_result = extract_emails_from_pages(poc_pages, params, conference_name)
+        if extract_result.llm_audit:
+            llm_audit_entries.append(extract_result.llm_audit)
         if extract_result.conference_metadata:
             conference_metadata_by_url[conference.official_url.rstrip("/")] = (
                 extract_result.conference_metadata
@@ -235,6 +246,7 @@ def execute_extract_run(db: Session, run: SearchRun) -> SearchRun:
             "leads_found": len(leads),
             "primary_leads_persisted": leads_persisted,
             "llm_extraction_enabled": is_llm_extraction_enabled(),
+            "llm_audit": llm_audit_entries,
         }
     )
 
@@ -244,4 +256,12 @@ def execute_extract_run(db: Session, run: SearchRun) -> SearchRun:
     run.finished_at = _utcnow()
     db.commit()
     db.refresh(run)
+    log.info(
+        "Extract finished for run %s — status=%s emails=%d leads=%d llm_calls=%d",
+        run.id,
+        run.status,
+        len(all_contacts),
+        leads_persisted,
+        sum(1 for entry in llm_audit_entries if entry.get("success")),
+    )
     return run

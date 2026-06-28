@@ -114,6 +114,7 @@ class ConferenceLlmMetadata:
 class ExtractEmailsResult:
     hits: list[RawEmailHit]
     conference_metadata: ConferenceLlmMetadata | None = None
+    llm_audit: dict[str, Any] | None = None
 
 
 @dataclass

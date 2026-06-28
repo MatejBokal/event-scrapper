@@ -114,4 +114,25 @@ if st.session_state.last_run:
         with st.expander("Errors / warnings"):
             for err in run["errors"]:
                 st.write(err)
+    llm_audit = stats.get("llm_audit") or []
+    if llm_audit:
+        with st.expander("LLM audit (Perplexity calls)"):
+            for entry in llm_audit:
+                status = "OK" if entry.get("success") else entry.get("skipped_reason") or "failed"
+                st.markdown(
+                    f"**{entry.get('conference_url', '—')}** — `{status}` "
+                    f"({entry.get('duration_ms')} ms)"
+                )
+                if entry.get("pages_selected"):
+                    st.caption("Pages: " + ", ".join(entry["pages_selected"]))
+                if entry.get("organizers_found"):
+                    st.caption(f"Organizers from LLM: {entry['organizers_found']}")
+                if entry.get("conference_fields_filled"):
+                    st.caption("Conference fields: " + ", ".join(entry["conference_fields_filled"]))
+                if entry.get("usage"):
+                    st.caption(f"Token usage: `{entry['usage']}`")
+                if entry.get("error"):
+                    st.error(entry["error"])
+    if stats.get("llm_extraction_enabled"):
+        st.caption("Detailed pipeline logs: `logs/app.log` in the repo root.")
     st.page_link(PAGE_REVIEW, label="Go to Review leads →", icon="📋")

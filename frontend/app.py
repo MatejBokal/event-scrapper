@@ -20,20 +20,20 @@ init_state()
 if not render_global_sidebar():
     st.stop()
 
-# Conference detail is opened via query param — show without cluttering main nav.
-if st.query_params.get("conference"):
-    detail_page = st.Page(PAGE_DETAIL, title="Conference detail", icon="📄")
-    detail_page.run()
-    st.stop()
-
 find_leads = st.Page(PAGE_FIND, title="Find leads", icon="🔍", default=True)
 review_leads = st.Page(PAGE_REVIEW, title="Review leads", icon="📋")
 manual_crawl = st.Page(PAGE_MANUAL, title="Manual crawl", icon="🛠️")
+conference_detail = st.Page(
+    PAGE_DETAIL,
+    title="Conference detail",
+    icon="📄",
+    visibility="hidden",
+)
 
 pg = st.navigation(
     {
         "Search": [find_leads],
-        "Leads": [review_leads, manual_crawl],
+        "Leads": [review_leads, manual_crawl, conference_detail],
     },
     position="sidebar",
     expanded=True,

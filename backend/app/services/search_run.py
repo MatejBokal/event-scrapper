@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -8,7 +9,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models import CrawledPage, SearchQuery, SearchResult, SearchRun
 from app.schemas.search_run import CrawledPageRead, SearchRunDetail
-from app.services.poc_bridge import SearchParams, build_queries, ddg_search
+from app.services.poc_bridge import SearchParams, build_queries, ddg_search, setup_logging
+
+setup_logging()
+log = logging.getLogger("leadfinder.search")
 
 
 def _utcnow() -> datetime:
@@ -81,6 +85,13 @@ def execute_search_run(db: Session, run: SearchRun, *, execute_search: bool = Tr
     db.refresh(run)
 
     queries = build_queries(params)
+    log.info(
+        "Search started for run %s — field=%s region=%s queries=%d",
+        run.id,
+        run.field,
+        run.region,
+        len(queries),
+    )
     persist_queries(db, run.id, queries)
 
     if not execute_search:
@@ -111,6 +122,13 @@ def execute_search_run(db: Session, run: SearchRun, *, execute_search: bool = Tr
     run.finished_at = _utcnow()
     db.commit()
     db.refresh(run)
+    log.info(
+        "Search finished for run %s — status=%s hits=%d errors=%d",
+        run.id,
+        status,
+        hit_count,
+        len(errors),
+    )
     return run
 
 

@@ -244,11 +244,16 @@ def extract_emails_from_pages(
 ) -> ExtractEmailsResult:
     hits = _regex_hits_from_pages(pages, params, conference_name)
     metadata = None
+    llm_audit = None
 
     if is_llm_extraction_enabled():
         from backend.llm_extractor import extract_llm_for_site
 
-        llm_hits, metadata = extract_llm_for_site(pages, hits, params, conference_name)
+        llm_hits, metadata, llm_audit = extract_llm_for_site(pages, hits, params, conference_name)
         hits = _merge_hits(hits, llm_hits)
 
-    return ExtractEmailsResult(hits=hits, conference_metadata=metadata)
+    return ExtractEmailsResult(
+        hits=hits,
+        conference_metadata=metadata,
+        llm_audit=llm_audit,
+    )

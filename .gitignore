@@ -20,3 +20,8 @@ Thumbs.db
 # Playwright local cache (not needed in repo)
 playwright-report/
 test-results/
+
+# Application logs
+logs/
+*.log
+!logs/.gitkeep

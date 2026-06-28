@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 from collections import defaultdict
 from datetime import date, datetime
 from typing import Any
@@ -12,6 +13,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from backend.app_logging import get_logger, llm_debug_enabled
 from backend.config import (
     CONTACT_TYPE_KEYWORDS,
     LLM_MAX_PAGE_CHARS,
@@ -30,7 +32,7 @@ from backend.extractor import (
 )
 from backend.models import ConferenceLlmMetadata, CrawledPage, RawEmailHit, SearchParams
 
-logger = logging.getLogger(__name__)
+logger = get_logger("llm")
 
 PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 
@@ -299,7 +301,45 @@ def _resolve_page_for_organizer(
     return None
 
 
-def _call_perplexity_for_site(conference_url: str, pages_block: str) -> dict[str, Any]:
+def _metadata_filled_fields(metadata: ConferenceLlmMetadata | None) -> list[str]:
+    if metadata is None:
+        return []
+    fields: list[str] = []
+    if metadata.name:
+        fields.append("name")
+    if metadata.start_date:
+        fields.append("start_date")
+    if metadata.end_date:
+        fields.append("end_date")
+    if metadata.month_year:
+        fields.append("month_year")
+    if metadata.location:
+        fields.append("location")
+    if metadata.country:
+        fields.append("country")
+    if metadata.description:
+        fields.append("description")
+    if metadata.language:
+        fields.append("language")
+    return fields
+
+
+def _audit_base(conference_url: str) -> dict[str, Any]:
+    return {
+        "conference_url": conference_url,
+        "pages_selected": [],
+        "success": False,
+        "skipped_reason": None,
+        "organizers_found": 0,
+        "conference_fields_filled": [],
+        "model": get_perplexity_model(),
+        "duration_ms": None,
+        "usage": None,
+        "error": None,
+    }
+
+
+def _call_perplexity_for_site(conference_url: str, pages_block: str) -> tuple[dict[str, Any], dict[str, Any]]:
     api_key = get_perplexity_api_key()
     if not api_key:
         raise RuntimeError("PERPLEXITY_API_KEY is not set")
@@ -338,7 +378,15 @@ def _call_perplexity_for_site(conference_url: str, pages_block: str) -> dict[str
     content = choices[0].get("message", {}).get("content", "")
     if not content:
         raise ValueError("Perplexity response has empty content")
-    return _parse_json_content(content)
+
+    if llm_debug_enabled():
+        logger.debug(
+            "LLM raw response for %s (first 800 chars): %s",
+            conference_url,
+            content[:800],
+        )
+
+    return _parse_json_content(content), body
 
 
 def _organizers_to_hits(
@@ -422,25 +470,72 @@ def extract_llm_for_site(
     regex_hits: list[RawEmailHit],
     params: SearchParams,
     conference_name: str | None,
-) -> tuple[list[RawEmailHit], ConferenceLlmMetadata | None]:
+) -> tuple[list[RawEmailHit], ConferenceLlmMetadata | None, dict[str, Any]]:
     """One Perplexity call per conference site on the most promising pages."""
+    conference_url = pages[0].conference_url if pages else ""
+    audit = _audit_base(conference_url)
+
     if not is_llm_extraction_enabled():
-        return [], None
+        audit["skipped_reason"] = "llm_disabled"
+        logger.info("LLM skipped for %s: disabled", conference_url or "(no pages)")
+        return [], None, audit
 
     selected = select_llm_pages(pages, regex_hits, params)
+    audit["pages_selected"] = [page.url for page in selected]
+
     if not selected:
-        return [], None
+        audit["skipped_reason"] = (
+            "no_promising_pages" if regex_hits else "no_eligible_pages_or_hail_mary"
+        )
+        logger.info(
+            "LLM skipped for %s: %s (regex_hits=%d)",
+            conference_url,
+            audit["skipped_reason"],
+            len(regex_hits),
+        )
+        return [], None, audit
 
     pages_block, pages_by_url = _combine_selected_pages(selected)
     conference_url = selected[0].conference_url
+    audit["conference_url"] = conference_url
 
+    logger.info(
+        "LLM call for %s — pages=%s",
+        conference_url,
+        ", ".join(audit["pages_selected"]),
+    )
+
+    started = time.perf_counter()
     try:
-        data = _call_perplexity_for_site(conference_url, pages_block)
+        data, raw_body = _call_perplexity_for_site(conference_url, pages_block)
     except Exception as exc:
-        logger.warning("LLM extraction failed for %s: %s", conference_url, exc)
-        return [], None
+        audit["error"] = str(exc)
+        audit["duration_ms"] = int((time.perf_counter() - started) * 1000)
+        logger.warning(
+            "LLM extraction failed for %s after %sms: %s",
+            conference_url,
+            audit["duration_ms"],
+            exc,
+        )
+        return [], None, audit
+
+    audit["duration_ms"] = int((time.perf_counter() - started) * 1000)
+    audit["usage"] = raw_body.get("usage")
 
     combined_text = pages_block
     metadata = _parse_conference_metadata(data, combined_text, conference_name)
     hits = _organizers_to_hits(data, pages_by_url, params, conference_name)
-    return hits, metadata
+
+    audit["success"] = True
+    audit["organizers_found"] = len(hits)
+    audit["conference_fields_filled"] = _metadata_filled_fields(metadata)
+
+    logger.info(
+        "LLM OK for %s — %sms, organizers=%d, conference_fields=%s, usage=%s",
+        conference_url,
+        audit["duration_ms"],
+        len(hits),
+        audit["conference_fields_filled"] or "none",
+        audit["usage"],
+    )
+    return hits, metadata, audit

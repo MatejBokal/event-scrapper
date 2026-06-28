@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -23,8 +24,12 @@ from app.services.poc_bridge import (
     is_listing_domain,
     is_spam_domain,
     select_sites,
+    setup_logging,
 )
 from app.utils import normalize_official_url
+
+setup_logging()
+log = logging.getLogger("leadfinder.crawl")
 
 EVIDENCE_SNIPPET_MAX = 500
 
@@ -394,6 +399,8 @@ def execute_crawl_run(db: Session, run: SearchRun) -> SearchRun:
         db.refresh(run)
         return run
 
+    log.info("Crawl started for run %s — targets=%d", run.id, len(crawl_targets))
+
     pages_crawled = 0
     conferences_upserted = 0
     sites_blocked = 0
@@ -461,4 +468,12 @@ def execute_crawl_run(db: Session, run: SearchRun) -> SearchRun:
     run.finished_at = _utcnow()
     db.commit()
     db.refresh(run)
+    log.info(
+        "Crawl finished for run %s — status=%s pages=%d conferences=%d blocked=%d",
+        run.id,
+        run.status,
+        pages_crawled,
+        conferences_upserted,
+        sites_blocked,
+    )
     return run

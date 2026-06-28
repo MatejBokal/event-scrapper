@@ -13,7 +13,8 @@ def open_conference(conference_id: str, *, from_page: str = PAGE_REVIEW) -> None
 
 def go_back_from_detail() -> None:
     return_page = st.session_state.pop("detail_return_page", PAGE_REVIEW)
-    st.query_params.clear()
+    if "conference" in st.query_params:
+        del st.query_params["conference"]
     st.switch_page(return_page)
 
 

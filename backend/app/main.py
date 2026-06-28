@@ -1,3 +1,16 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+POC_ROOT = Path(__file__).resolve().parents[2] / "poc"
+if str(POC_ROOT) not in sys.path:
+    sys.path.insert(0, str(POC_ROOT))
+
+from backend.app_logging import setup_logging  # noqa: E402
+
+setup_logging()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

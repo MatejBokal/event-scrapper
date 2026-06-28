@@ -17,6 +17,10 @@ def _load_repo_dotenv() -> None:
 
 _load_repo_dotenv()
 
+from backend.app_logging import setup_logging  # noqa: E402
+
+setup_logging()
+
 MAX_QUERIES = 30
 RESULTS_PER_QUERY = 15
 MAX_CONFERENCE_SITES = 10

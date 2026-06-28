@@ -12,6 +12,7 @@ from backend.extractor import extract_emails_from_pages
 from backend.geo_filter import apply_geo_scoring
 from backend.lead_ranker import build_leads
 from backend.config import LISTING_MAX_PER_RUN
+from backend.app_logging import get_logger
 from backend.listing_discovery import expand_sites_via_listings
 from backend.models import (
     ContactResult,
@@ -24,6 +25,8 @@ from backend.models import (
 from backend.query_builder import build_queries
 from backend.search_ddg import search_queries
 from backend.url_scorer import select_sites
+
+log = get_logger("pipeline")
 from backend.validator import validate_hits
 
 
@@ -82,6 +85,12 @@ def run_pipeline(
     pages_without_emails = []
 
     try:
+        log.info(
+            "PoC pipeline started — field=%s region=%s months=%s",
+            params.field,
+            params.region,
+            params.selected_months,
+        )
         manual_site, manual_error = _manual_selected_site(params.manual_official_url)
         if manual_error:
             result.errors.append(manual_error)
@@ -229,6 +238,13 @@ def run_pipeline(
         result.stats.leads_found = len(result.leads)
         result.stats.pages_without_emails = len(pages_without_emails)
 
+        log.info(
+            "PoC pipeline finished — leads=%d emails=%d pages=%d",
+            result.stats.leads_found,
+            result.stats.emails_found,
+            result.stats.pages_crawled,
+        )
+
         _emit(
             on_progress,
             "done",
@@ -240,6 +256,7 @@ def run_pipeline(
 
     except Exception as exc:
         result.errors.append(str(exc))
+        log.exception("PoC pipeline failed: %s", exc)
         _emit(on_progress, "error", {"message": str(exc)})
 
     return result
