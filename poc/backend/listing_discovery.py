@@ -1,7 +1,9 @@
-"""Resolve official conference URLs from listing / aggregator pages."""
+"""Resolve official conference URLs from listing / ticket gateway pages."""
 
 from __future__ import annotations
 
+import concurrent.futures
+import json
 import re
 from urllib.parse import urljoin, urlparse
 
@@ -9,12 +11,18 @@ from bs4 import BeautifulSoup
 
 from backend.config import (
     CONFERENCE_KEYWORDS,
+    GATEWAY_PAGE_TIMEOUT_SECONDS,
     LISTING_MAX_PER_RUN,
     OFFICIAL_LINKS_PER_LISTING,
 )
-from backend.crawler import _open_playwright_session, fetch_single_page
+from backend.crawler import _open_playwright_session, fetch_gateway_page, fetch_single_page
 from backend.playwright_fetcher import PlaywrightSession
-from backend.domains import domain, is_blocked_outbound_domain, is_listing_domain
+from backend.domains import (
+    domain,
+    is_blocked_outbound_domain,
+    is_gateway_domain,
+    is_ticket_vendor_domain,
+)
 from backend.models import ListingDiscovery, SearchParams, SelectedSite
 from backend.regions import get_region_profile
 
@@ -45,6 +53,12 @@ OFFICIAL_LINK_MARKERS = (
     "learn more",
     "register now",
     "book now",
+    "zur website",
+    "offizielle website",
+    "veranstalter",
+    "mehr informationen",
+    "event information",
+    "organizer info",
 )
 
 
@@ -114,6 +128,85 @@ def _score_official_candidate(
     return score
 
 
+def _fetch_gateway_html(
+    url: str,
+    playwright: PlaywrightSession | None = None,
+) -> tuple[str, str]:
+    """Light fetch with a hard timeout so ticket pages cannot hang the run."""
+    _ = playwright  # gateway resolution uses HTTP-only fetch_gateway_page
+    timeout = max(15, int(GATEWAY_PAGE_TIMEOUT_SECONDS))
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(fetch_gateway_page, url)
+    try:
+        return future.result(timeout=timeout)
+    except Exception:
+        return url, ""
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def _collect_json_ld_urls(data: object, urls: list[str]) -> None:
+    if isinstance(data, dict):
+        for key in ("url", "sameAs"):
+            value = data.get(key)
+            if isinstance(value, str) and value.startswith("http"):
+                urls.append(value)
+        organizer = data.get("organizer")
+        if isinstance(organizer, dict):
+            org_url = organizer.get("url")
+            if isinstance(org_url, str) and org_url.startswith("http"):
+                urls.append(org_url)
+        for value in data.values():
+            _collect_json_ld_urls(value, urls)
+    elif isinstance(data, list):
+        for item in data:
+            _collect_json_ld_urls(item, urls)
+
+
+def _extract_structured_urls(
+    html: str,
+    page_url: str,
+    params: SearchParams,
+) -> list[tuple[str, str, float]]:
+    soup = BeautifulSoup(html, "lxml")
+    candidates: dict[str, tuple[str, float]] = {}
+
+    for tag in soup.find_all("meta"):
+        prop = (tag.get("property") or tag.get("name") or "").lower()
+        if prop not in ("og:url", "twitter:url"):
+            continue
+        content = (tag.get("content") or "").strip()
+        if not content.startswith("http"):
+            continue
+        if is_blocked_outbound_domain(content) or domain(content) == domain(page_url):
+            continue
+        score = _score_official_candidate(content, "", params)
+        if score >= 8:
+            candidates[_normalize_url(content)] = ("", score)
+
+    for script in soup.find_all("script", type="application/ld+json"):
+        raw = script.string or script.get_text() or ""
+        if not raw.strip():
+            continue
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        structured_urls: list[str] = []
+        _collect_json_ld_urls(payload, structured_urls)
+        for candidate_url in structured_urls:
+            if is_blocked_outbound_domain(candidate_url) or domain(candidate_url) == domain(page_url):
+                continue
+            score = _score_official_candidate(candidate_url, "", params)
+            if score >= 8:
+                normalized = _normalize_url(candidate_url)
+                existing = candidates.get(normalized)
+                if existing is None or score > existing[1]:
+                    candidates[normalized] = ("", score)
+
+    return [(url, title, score) for url, (title, score) in candidates.items()]
+
+
 def extract_official_urls(
     html: str,
     listing_url: str,
@@ -159,18 +252,32 @@ def extract_official_urls(
         key=lambda item: item[2],
         reverse=True,
     )
-    return ranked[:OFFICIAL_LINKS_PER_LISTING]
+    structured = _extract_structured_urls(html, listing_url, params)
+    merged: dict[str, tuple[str, float]] = {
+        url: (title, score) for url, title, score in ranked
+    }
+    for url, title, score in structured:
+        existing = merged.get(url)
+        if existing is None or score > existing[1]:
+            merged[url] = (title or existing[0] if existing else "", score)
+    final_ranked = sorted(
+        ((url, title, score) for url, (title, score) in merged.items()),
+        key=lambda item: item[2],
+        reverse=True,
+    )
+    return final_ranked[:OFFICIAL_LINKS_PER_LISTING]
 
 
-def resolve_listing_site(
+def resolve_gateway_site(
     site: SelectedSite,
     params: SearchParams,
     playwright: PlaywrightSession | None = None,
 ) -> tuple[list[SelectedSite], list[ListingDiscovery]]:
-    final_url, html = fetch_single_page(site.url, playwright=playwright)
+    final_url, html = _fetch_gateway_html(site.url, playwright=playwright)
     if not html:
         return [], []
 
+    source_kind = "ticket" if is_ticket_vendor_domain(site.url) else "listing"
     discoveries: list[ListingDiscovery] = []
     official_sites: list[SelectedSite] = []
 
@@ -189,8 +296,8 @@ def resolve_listing_site(
                 url=official_url,
                 title=title or site.title,
                 url_score=site.url_score + link_score,
-                snippet=f"Discovered via listing: {site.url}",
-                source="listing",
+                snippet=f"Discovered via {source_kind}: {site.url}",
+                source=source_kind,
                 discovered_from=site.url,
             )
         )
@@ -198,36 +305,46 @@ def resolve_listing_site(
     return official_sites, discoveries
 
 
+def resolve_listing_site(
+    site: SelectedSite,
+    params: SearchParams,
+    playwright: PlaywrightSession | None = None,
+) -> tuple[list[SelectedSite], list[ListingDiscovery]]:
+    """Backward-compatible alias for resolve_gateway_site."""
+    return resolve_gateway_site(site, params, playwright=playwright)
+
+
 def expand_sites_via_listings(
     sites: list[SelectedSite],
     params: SearchParams,
 ) -> tuple[list[SelectedSite], list[SelectedSite], list[ListingDiscovery], list[str]]:
-    """Split listing pages from official sites and resolve outbound official URLs."""
+    """Split gateway pages (listings, ticket vendors) from official sites and resolve outbound URLs."""
     crawl_targets: list[SelectedSite] = []
     listing_sources: list[SelectedSite] = []
     discoveries: list[ListingDiscovery] = []
     errors: list[str] = []
 
     for site in sites:
-        if is_listing_domain(site.url):
+        if is_gateway_domain(site.url):
             listing_sources.append(site)
         else:
             crawl_targets.append(site)
 
-    listings_processed = 0
+    gateways_processed = 0
     playwright = _open_playwright_session()
     try:
-        for listing in listing_sources:
-            if listings_processed >= LISTING_MAX_PER_RUN:
+        for gateway in listing_sources:
+            if gateways_processed >= LISTING_MAX_PER_RUN:
                 break
-            listings_processed += 1
+            gateways_processed += 1
 
+            kind = "ticket page" if is_ticket_vendor_domain(gateway.url) else "listing page"
             try:
-                official_sites, found = resolve_listing_site(listing, params, playwright)
+                official_sites, found = resolve_gateway_site(gateway, params, playwright)
                 discoveries.extend(found)
                 crawl_targets.extend(official_sites)
             except Exception as exc:
-                errors.append(f"Could not read listing page {listing.url}: {exc}")
+                errors.append(f"Could not read {kind} {gateway.url}: {exc}")
     finally:
         if playwright is not None:
             playwright.close()
@@ -241,7 +358,7 @@ def expand_sites_via_listings(
         seen_urls.add(normalized)
         deduped.append(site)
 
-    if len(deduped) > params.max_conferences:
+    if params.max_conferences > 0 and len(deduped) > params.max_conferences:
         deduped = deduped[: params.max_conferences]
 
     return deduped, listing_sources, discoveries, errors

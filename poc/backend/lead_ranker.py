@@ -161,7 +161,10 @@ def build_leads(
         if not candidates:
             continue
 
-        best = max(candidates, key=_contact_priority)
+        organizer_quality = {"named_organizer", "role_email"}
+        organizer_candidates = [c for c in candidates if c.contact_quality in organizer_quality]
+        pool = organizer_candidates if organizer_candidates else candidates
+        best = max(pool, key=_contact_priority)
         leads.append(enrich_lead_from_metadata(best, meta))
 
     leads.sort(key=lambda lead: _contact_priority(lead), reverse=True)

@@ -25,3 +25,10 @@ test-results/
 logs/
 *.log
 !logs/.gitkeep
+
+# Listgen bulk output
+listgen/output/*.xlsx
+listgen/output/*.csv
+listgen/output/checkpoint.json
+listgen/output/test_checkpoint.json
+!listgen/output/.gitkeep

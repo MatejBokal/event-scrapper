@@ -1,0 +1,66 @@
+{
+  "countries": ["Germany"],
+  "fields": [
+    "Healthcare",
+    "Pharmaceuticals",
+    "Security",
+    "Cybersecurity",
+    "IT",
+    "AI",
+    "Finance",
+    "Technology",
+    "Cancer",
+    "Bioinformatics",
+    "Engineering"
+  ],
+  "months": [
+    "2026-09",
+    "2026-10",
+    "2026-11",
+    "2026-12"
+  ],
+  "months_mode": "per_task",
+  "run_mode": "full",
+  "max_conferences_per_run": 0,
+  "contact_type": "any",
+  "extraction": {
+    "use_llm": false
+  },
+  "search": {
+    "query_mode": "sampled",
+    "max_queries": 0,
+    "results_per_query": 50,
+    "request_delay_seconds": 1.5,
+    "include_organizer_queries": true,
+    "extra_event_synonyms": {
+      "en": ["meeting", "seminar", "workshop"],
+      "de": ["konferenz", "kongress", "symposium", "messe", "veranstaltung", "tagung"]
+    }
+  },
+  "crawl": {
+    "max_pages_per_site": 12,
+    "max_crawl_depth": 2,
+    "listing_max_per_run": 25,
+    "site_timeout_seconds": 180,
+    "one_url_per_domain": true,
+    "domain_denylist_file": "listgen/output/domain_denylist.json",
+    "require_event_keyword": true,
+    "keyword_check_root": true
+  },
+  "output": {
+    "file": "listgen/output/results.xlsx",
+    "checkpoint": "listgen/output/checkpoint.json",
+    "links_file": "listgen/output/links.csv",
+    "links_deduped_file": "listgen/output/links_deduped.csv",
+    "skip_log_file": "listgen/output/skip_log.jsonl",
+    "max_file_bytes": 20971520,
+    "workbook_save_every": 5,
+    "test_links_file": "listgen/output/test_links.csv",
+    "test_links_deduped_file": "listgen/output/test_links_deduped.csv"
+  },
+  "resume": true,
+  "test_run": {
+    "enabled": false,
+    "city": "Berlin"
+  }
+}

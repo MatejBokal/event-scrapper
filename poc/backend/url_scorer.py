@@ -97,9 +97,10 @@ def select_sites(
     selected: list[SelectedSite] = []
     skipped: list[SearchHit] = []
     min_score = _min_score_for_region(params)
+    unlimited = params.max_conferences <= 0
 
     for hit in ranked:
-        if len(selected) >= params.max_conferences:
+        if not unlimited and len(selected) >= params.max_conferences:
             skipped.append(hit)
             continue
 

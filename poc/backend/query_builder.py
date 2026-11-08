@@ -9,6 +9,19 @@ from backend.regions import RegionProfile, get_field_terms, get_region_profile
 MONTH_QUERY_SAMPLE_SIZE = 3
 MONTH_QUERY_SLOTS = 6
 
+# Overridden by listgen settings_loader when query_mode is "exhaustive"
+EXHAUSTIVE_QUERIES = False
+EXTRA_EVENT_SYNONYMS: dict[str, list[str]] = {}
+INCLUDE_ORGANIZER_QUERIES = True
+
+
+def get_month_query_sample_size() -> int:
+    return MONTH_QUERY_SAMPLE_SIZE
+
+
+def get_month_query_slots() -> int:
+    return MONTH_QUERY_SLOTS
+
 ORGANIZER_SUFFIXES: dict[str, list[str]] = {
     "en": ["organizer contact", "organising committee", "event manager"],
     "sl": ["organizator", "organizator dogodka", "organizacijski odbor"],
@@ -194,16 +207,17 @@ def _months_from_selection(selected_months: tuple[str, ...]) -> list[tuple[int, 
 
 def _sample_query_months(
     selected_months: tuple[str, ...],
-    max_samples: int = MONTH_QUERY_SAMPLE_SIZE,
+    max_samples: int | None = None,
 ) -> list[tuple[int, int]]:
     months = _months_from_selection(selected_months)
     if not months:
         return []
-    if len(months) <= max_samples:
+    limit = max_samples if max_samples is not None else get_month_query_sample_size()
+    if len(months) <= limit:
         return months
 
     indices = sorted({0, len(months) // 2, len(months) - 1})
-    return [months[index] for index in indices[:max_samples]]
+    return [months[index] for index in indices[:limit]]
 
 
 def _year_from_selection(selected_months: tuple[str, ...]) -> str:
@@ -285,7 +299,8 @@ def _build_month_queries(
     languages = list(profile.languages[:2])
     cities = locations[:2] if len(languages) == 1 else locations[:1]
     reserve_organizer = bool(cities)
-    conference_slots = MONTH_QUERY_SLOTS - 1 if reserve_organizer else MONTH_QUERY_SLOTS
+    month_slots = get_month_query_slots()
+    conference_slots = month_slots - 1 if reserve_organizer else month_slots
     synonym_cursor = 0
 
     for year, month_num in sampled_months:
@@ -315,16 +330,71 @@ def _build_month_queries(
             f"{field_term} {suffixes[0]} {cities[0]} {month_label}".strip()
         )
 
-    return queries[:MONTH_QUERY_SLOTS]
+    return queries[:month_slots]
+
+
+def _synonyms_for_language(profile: RegionProfile, lang: str) -> tuple[str, ...]:
+    base = profile.event_synonyms.get(lang, profile.event_synonyms.get("en", ()))
+    extra = EXTRA_EVENT_SYNONYMS.get(lang, [])
+    seen: set[str] = set()
+    merged: list[str] = []
+    for term in (*base, *extra):
+        cleaned = term.strip()
+        if cleaned and cleaned.lower() not in seen:
+            seen.add(cleaned.lower())
+            merged.append(cleaned)
+    return tuple(merged)
+
+
+def _build_queries_exhaustive(
+    profile: RegionProfile,
+    field_terms: list[str],
+    locations: list[str],
+    selected_months: tuple[str, ...],
+    year: str,
+) -> list[str]:
+    """Every language × event synonym × location × month, plus year-only variants."""
+    queries: list[str] = []
+    months = _months_from_selection(selected_months)
+
+    for lang in profile.languages:
+        field_term = _field_term_for_language(lang, field_terms)
+        synonyms = _synonyms_for_language(profile, lang)
+        suffixes = ORGANIZER_SUFFIXES.get(lang, ORGANIZER_SUFFIXES["en"])
+
+        for location in locations:
+            for year_num, month_num in months:
+                month_label = _month_label(year_num, month_num, lang)
+                for synonym in synonyms:
+                    queries.append(f"{field_term} {synonym} {location} {month_label}".strip())
+                if INCLUDE_ORGANIZER_QUERIES and suffixes:
+                    queries.append(f"{field_term} {suffixes[0]} {location} {month_label}".strip())
+
+            if year:
+                for synonym in synonyms:
+                    queries.append(f"{field_term} {synonym} {location} {year}".strip())
+                if INCLUDE_ORGANIZER_QUERIES and suffixes:
+                    queries.append(f"{field_term} {suffixes[0]} {location} {year}".strip())
+
+    return queries
 
 
 def build_queries(params: SearchParams) -> list[str]:
     profile = get_region_profile(params.region, params.custom_region)
     field_terms = get_field_terms(params.field, profile)
     year = _year_from_selection(params.selected_months)
-    sampled_months = _sample_query_months(params.selected_months)
-    locations: list[str] = list(profile.cities) or [profile.display_name]
+    if params.target_city.strip():
+        locations = [params.target_city.strip()]
+    else:
+        locations = list(profile.cities) or [profile.display_name]
 
+    if EXHAUSTIVE_QUERIES:
+        combined = _build_queries_exhaustive(
+            profile, field_terms, locations, params.selected_months, year
+        )
+        return _dedupe(combined)[:MAX_QUERIES]
+
+    sampled_months = _sample_query_months(params.selected_months)
     month_queries = _build_month_queries(profile, field_terms, locations, sampled_months)
 
     per_language: dict[str, list[str]] = {}

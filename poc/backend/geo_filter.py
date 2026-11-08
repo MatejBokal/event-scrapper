@@ -25,7 +25,11 @@ def geo_score(hit: SearchHit, profile: RegionProfile, params: SearchParams) -> f
         if country and country in text:
             score += 12
 
-    for city in profile.cities:
+    city_targets = list(profile.cities)
+    if params.target_city.strip():
+        city_targets = [params.target_city.strip(), *city_targets]
+
+    for city in city_targets:
         if city.lower() in text:
             score += 15
 

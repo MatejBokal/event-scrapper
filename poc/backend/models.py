@@ -18,7 +18,12 @@ class SearchParams:
     contact_type: str = "organizer"
     max_conferences: int = 10
     custom_region: str = ""
+    target_city: str = ""
     manual_official_url: str = ""
+    # Expanded venue cities for hard presence gate (may exceed search cities).
+    city_allowlist: tuple[str, ...] = ()
+    # Event synonyms for keyword gate (EN + native); empty → resolve from region profile.
+    event_keywords: tuple[str, ...] = ()
 
     @property
     def start_month(self) -> str:

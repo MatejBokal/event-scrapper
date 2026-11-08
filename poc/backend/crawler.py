@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import time
 from collections import deque
 from urllib.parse import urljoin, urlparse
@@ -14,11 +15,14 @@ from bs4 import BeautifulSoup
 
 from backend.config import (
     JS_FRAMEWORK_MARKERS,
+    GATEWAY_PAGE_TIMEOUT_SECONDS,
     MAX_CRAWL_DEPTH,
     MAX_PAGES_PER_SITE,
     MIN_PAGE_TEXT_LENGTH,
     PREFERRED_PATH_KEYWORDS,
     REQUEST_DELAY_SECONDS,
+    ROBOTS_TIMEOUT_SECONDS,
+    SITE_CRAWL_TIMEOUT_SECONDS,
     USER_AGENT,
 )
 from backend.models import CrawledPage, CrawlSiteResult, SelectedSite
@@ -72,8 +76,14 @@ def _load_robots(base_url: str) -> RobotFileParser | None:
     robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
     parser = RobotFileParser()
     try:
-        parser.set_url(robots_url)
-        parser.read()
+        response = requests.get(
+            robots_url,
+            timeout=ROBOTS_TIMEOUT_SECONDS,
+            headers={"User-Agent": USER_AGENT},
+        )
+        if response.status_code >= 400:
+            return None
+        parser.parse(response.text.splitlines())
         return parser
     except Exception:
         return None
@@ -88,8 +98,8 @@ def _open_playwright_session() -> PlaywrightSession | None:
         return None
 
 
-def _fetch_html_http(url: str, session: requests.Session) -> tuple[str, str]:
-    response = session.get(url, timeout=20)
+def _fetch_html_http(url: str, session: requests.Session, *, timeout: int = 20) -> tuple[str, str]:
+    response = session.get(url, timeout=timeout)
     response.raise_for_status()
     content_type = response.headers.get("Content-Type", "")
     if "text" not in content_type and "html" not in content_type:
@@ -241,7 +251,52 @@ def fetch_single_page(
             active_playwright.close()
 
 
+def probe_page(url: str, *, conference_url: str = "") -> CrawledPage | None:
+    """Fetch one page into a CrawledPage for keyword/presence probes. Returns None on failure."""
+    try:
+        final_url, html = fetch_single_page(url)
+    except Exception:
+        return None
+    if not html:
+        return None
+    return CrawledPage(
+        url=final_url or url,
+        title=_extract_title(html),
+        page_type="probe",
+        extracted_text=_extract_text(html),
+        conference_url=conference_url or url,
+        html=html,
+    )
+
+
+def fetch_gateway_page(url: str) -> tuple[str, str]:
+    """HTTP-only gateway fetch for listing/ticket pages. Never raises."""
+    http_timeout = min(15, max(5, int(GATEWAY_PAGE_TIMEOUT_SECONDS)))
+    session = requests.Session()
+    session.headers.update({"User-Agent": USER_AGENT})
+    try:
+        return _fetch_html_http(url, session, timeout=http_timeout)
+    except Exception:
+        return url, ""
+
+
 def crawl_site(site: SelectedSite) -> CrawlSiteResult:
+    timeout = max(30, int(SITE_CRAWL_TIMEOUT_SECONDS))
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_crawl_site_impl, site)
+    try:
+        return future.result(timeout=timeout)
+    except concurrent.futures.TimeoutError:
+        return CrawlSiteResult(
+            pages=[],
+            block_reason="timeout",
+            error_message=f"site crawl exceeded {timeout}s",
+        )
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def _crawl_site_impl(site: SelectedSite) -> CrawlSiteResult:
     start_url = _normalize_url(site.url)
     robots = _load_robots(start_url)
     session = requests.Session()
@@ -253,7 +308,7 @@ def crawl_site(site: SelectedSite) -> CrawlSiteResult:
     first_failure_status: int | None = None
     first_failure_message: str | None = None
 
-    playwright = _open_playwright_session()
+    playwright = None
     try:
         while queue and len(pages) < MAX_PAGES_PER_SITE:
             url, depth = queue.popleft()
@@ -267,7 +322,18 @@ def crawl_site(site: SelectedSite) -> CrawlSiteResult:
             time.sleep(REQUEST_DELAY_SECONDS)
 
             try:
+                if playwright is None and (
+                    domain_prefers_playwright(url)
+                    or listing_domain_prefers_playwright(url)
+                ):
+                    playwright = _open_playwright_session()
                 final_url, html = _fetch_page_html(url, session, playwright)
+                text = _extract_text(html) if html else ""
+                if playwright is None and html and _needs_playwright(html, text, final_url):
+                    playwright = _open_playwright_session()
+                    if playwright is not None:
+                        final_url, html = playwright.fetch(url)
+                        remember_js_domain(final_url)
             except HTTPError as exc:
                 if first_failure_message is None:
                     first_failure_status = exc.response.status_code if exc.response is not None else None

@@ -27,6 +27,8 @@ MAX_CONFERENCE_SITES = 10
 MAX_PAGES_PER_SITE = 10
 MAX_CRAWL_DEPTH = 2
 REQUEST_DELAY_SECONDS = 1.5
+SITE_CRAWL_TIMEOUT_SECONDS = 120
+ROBOTS_TIMEOUT_SECONDS = 10
 EVIDENCE_SNIPPET_CHARS = 200
 MIN_PAGE_TEXT_LENGTH = 100
 MIN_URL_SCORE = 8
@@ -95,6 +97,7 @@ LISTING_DOMAINS = [
 
 LISTING_MAX_PER_RUN = 3
 OFFICIAL_LINKS_PER_LISTING = 5
+GATEWAY_PAGE_TIMEOUT_SECONDS = 60
 
 # Hard-drop fake / SEO conference farms (event filter stage).
 SPAM_DOMAINS = [
@@ -121,6 +124,18 @@ AGGREGATOR_DENYLIST = [
     "mindauthors.com",
     "healthssummit.com",
     "waset.org",
+]
+
+# Ticket vendors — no organizer emails; crawls often hang on JS/anti-bot.
+TICKET_VENDOR_DOMAINS = [
+    "oeticket.com",
+    "oeticket.at",
+    "eventim.",
+    "ticketmaster.",
+    "adticket.",
+    "universe.com",
+    "fienta.com",
+    "tickets.",
 ]
 
 CONFERENCE_KEYWORDS = [
